@@ -23,6 +23,7 @@ deps:
 run: $(TARGET)
 	./$(TARGET)
 
+# Frontend static server on :5500 + API on :8080
 dev: $(TARGET)
 	@echo "Starting API on :8080 and frontend on :5500 ..."
 	@bash scripts/dev.sh

@@ -1,0 +1,1083 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>YourShop.Id — Marketplace Terbuka</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    /* eBay-inspired modern palette */
+    --bg: #F5F5F5;
+    --surface: #FFFFFF;
+    --surface2: #F0F0F0;
+    --border: #E5E5E5;
+    --border2: #C7C7C7;
+    --text: #191919;
+    --text2: #707070;
+    --text3: #A0A0A0;
+    --accent: #0064D2;
+    --accent2: #004E9A;
+    --accent-light: #E8F1FB;
+    --success: #057642;
+    --success-bg: #E6F5ED;
+    --warn: #9A6B00;
+    --warn-bg: #FFF8E6;
+    --danger: #C0292A;
+    --danger-bg: #FDEAEA;
+    --r: 8px;
+    --rl: 12px;
+    --font-head: 'Inter', sans-serif;
+    --font-body: 'DM Sans', sans-serif;
+    --shadow: 0 1px 4px rgba(0,0,0,0.08);
+    --shadow2: 0 4px 16px rgba(0,0,0,0.12);
+  }
+  body { font-family: var(--font-body); background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.5; min-height: 100vh; }
+
+  /* ── TOP UTILITY BAR (eBay-style) ── */
+  .top-bar {
+    background: #F7F7F7;
+    border-bottom: 1px solid var(--border);
+    padding: 0 1.5rem;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 12px;
+    color: var(--text2);
+  }
+  .top-bar a, .top-bar button {
+    background: none; border: none; color: var(--text2);
+    font-family: var(--font-body); font-size: 12px;
+    cursor: pointer; padding: 0 0.5rem; text-decoration: none;
+  }
+  .top-bar a:hover, .top-bar button:hover { color: var(--accent); text-decoration: underline; }
+  .top-bar-left, .top-bar-right { display: flex; align-items: center; gap: 0.25rem; }
+  .top-bar .sep { color: #ccc; margin: 0 0.15rem; }
+
+  /* ── MAIN HEADER ── */
+  .main-header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 0.75rem 1.5rem;
+    display: flex;
+    align-items: center;
+    gap: 1.25rem;
+    position: sticky;
+    top: 0;
+    z-index: 300;
+  }
+  .nav-logo {
+    font-family: var(--font-head);
+    font-weight: 800;
+    font-size: 1.45rem;
+    letter-spacing: -0.8px;
+    color: var(--text);
+    cursor: pointer;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.15rem;
+  }
+  .nav-logo span { color: var(--accent); }
+
+  /* Large search bar (eBay signature) */
+  .nav-search {
+    flex: 1;
+    max-width: 720px;
+    display: flex;
+    align-items: stretch;
+    border: 2px solid var(--text);
+    border-radius: 50px;
+    overflow: hidden;
+    background: #fff;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .nav-search:focus-within {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(0,100,210,0.15);
+  }
+  .search-cat-select {
+    border: none;
+    background: #F5F5F5;
+    padding: 0 0.75rem;
+    font-family: var(--font-body);
+    font-size: 13px;
+    color: var(--text2);
+    border-right: 1px solid var(--border);
+    outline: none;
+    cursor: pointer;
+    max-width: 140px;
+  }
+  .nav-search input {
+    flex: 1;
+    border: none;
+    padding: 0.65rem 1rem;
+    font-family: var(--font-body);
+    font-size: 15px;
+    color: var(--text);
+    outline: none;
+    background: transparent;
+  }
+  .nav-search input::placeholder { color: var(--text3); }
+  .search-btn {
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    padding: 0 1.35rem;
+    font-size: 15px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    transition: background 0.15s;
+  }
+  .search-btn:hover { background: var(--accent2); }
+
+  .nav-actions { display: flex; align-items: center; gap: 0.5rem; margin-left: auto; }
+  .nav-btn {
+    background: none;
+    border: 1px solid transparent;
+    color: var(--text);
+    border-radius: var(--r);
+    padding: 0.45rem 0.85rem;
+    font-family: var(--font-body);
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.15s;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+    white-space: nowrap;
+    height: 38px;
+  }
+  .nav-btn:hover { background: var(--accent-light); color: var(--accent); }
+  .nav-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .cart-count {
+    background: var(--accent);
+    color: #fff;
+    border-radius: 50%;
+    width: 18px; height: 18px;
+    font-size: 11px; font-weight: 700;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+
+  /* Category bar under header */
+  .cat-bar {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 0 1.5rem;
+    display: flex;
+    gap: 0.15rem;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .cat-bar::-webkit-scrollbar { display: none; }
+  .cat-bar-item {
+    background: none; border: none;
+    padding: 0.7rem 0.9rem;
+    font-family: var(--font-body);
+    font-size: 13px;
+    color: var(--text2);
+    cursor: pointer;
+    white-space: nowrap;
+    border-bottom: 2px solid transparent;
+    transition: all 0.15s;
+  }
+  .cat-bar-item:hover { color: var(--accent); }
+  .cat-bar-item.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+
+  /* PAGES */
+  .page { display: none; }
+  .page.active { display: block; }
+
+  /* HERO — eBay-inspired promotional banner */
+  .hero {
+    background: linear-gradient(135deg, #0064D2 0%, #004E9A 60%, #003A75 100%);
+    color: #fff;
+    padding: 2.75rem 2rem 2.5rem;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+  }
+  .hero::before {
+    content: '';
+    position: absolute; inset: 0;
+    background: radial-gradient(ellipse at 80% 20%, rgba(255,255,255,0.12) 0%, transparent 55%);
+    pointer-events: none;
+  }
+  .hero-tag {
+    display: inline-block;
+    background: rgba(255,255,255,0.15);
+    color: #fff;
+    border: 1px solid rgba(255,255,255,0.25);
+    border-radius: 100px;
+    font-size: 12px; font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    padding: 0.3rem 1rem;
+    margin-bottom: 1rem;
+  }
+  .hero h1 {
+    font-family: var(--font-head);
+    font-size: clamp(1.8rem, 4vw, 2.8rem);
+    font-weight: 800;
+    line-height: 1.15;
+    letter-spacing: -0.5px;
+    margin-bottom: 0.75rem;
+  }
+  .hero h1 em { color: #FFD100; font-style: normal; }
+  .hero p { color: rgba(255,255,255,0.85); font-size: 1rem; max-width: 520px; margin: 0 auto 1.5rem; }
+  .hero-cta { display: inline-flex; gap: 0.75rem; flex-wrap: wrap; justify-content: center; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 0.4rem;
+    padding: 0.65rem 1.4rem;
+    border-radius: 50px;
+    font-family: var(--font-body);
+    font-size: 14px; font-weight: 600;
+    cursor: pointer; transition: all 0.18s;
+    text-decoration: none; border: none;
+  }
+  .btn-primary { background: #FFD100; color: #191919; }
+  .btn-primary:hover { background: #F5C400; }
+  .btn-outline { background: transparent; color: #fff; border: 1.5px solid rgba(255,255,255,0.5); }
+  .btn-outline:hover { background: rgba(255,255,255,0.12); border-color: #fff; }
+  .btn-sm { padding: 0.4rem 0.9rem; font-size: 13px; }
+
+  /* CATEGORIES (secondary filter pills) */
+  .cats {
+    display: flex; gap: 0.5rem; flex-wrap: wrap;
+    padding: 1rem 1.5rem;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+  }
+  .cat-btn {
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 50px;
+    padding: 0.35rem 1rem;
+    font-family: var(--font-body);
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.15s;
+    color: var(--text2);
+  }
+  .cat-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .cat-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+  /* PRODUCT GRID */
+  .shop-layout {
+    display: grid;
+    grid-template-columns: 220px 1fr;
+    gap: 1.5rem;
+    padding: 1.5rem;
+    max-width: 1280px;
+    margin: 0 auto;
+  }
+  @media (max-width: 900px) {
+    .shop-layout { grid-template-columns: 1fr; }
+    .sidebar { display: none; }
+  }
+  .sidebar { position: sticky; top: 100px; height: fit-content; }
+  .sidebar-block {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--rl);
+    padding: 1.1rem 1.2rem;
+    margin-bottom: 0.85rem;
+  }
+  .sidebar-block h4 {
+    font-family: var(--font-head);
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text2);
+    margin-bottom: 0.85rem;
+  }
+  .filter-group { display: flex; flex-direction: column; gap: 0.45rem; }
+  .filter-item {
+    display: flex; align-items: center; gap: 0.5rem;
+    font-size: 13.5px; color: var(--text2); cursor: pointer;
+  }
+  .filter-item input { accent-color: var(--accent); }
+  .filter-item:hover { color: var(--text); }
+  .price-range { display: flex; gap: 0.5rem; margin-top: 0.4rem; }
+  .price-range input {
+    width: 100%;
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    padding: 0.35rem 0.55rem;
+    font-size: 13px;
+    font-family: var(--font-body);
+    color: var(--text);
+    background: var(--bg);
+    outline: none;
+  }
+  .price-range input:focus { border-color: var(--accent); }
+
+  .products-header {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;
+  }
+  .products-header h2 {
+    font-family: var(--font-head);
+    font-size: 1.15rem;
+    font-weight: 700;
+  }
+  .sort-select {
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    padding: 0.4rem 0.75rem;
+    font-family: var(--font-body);
+    font-size: 13px;
+    color: var(--text2);
+    background: var(--surface);
+    outline: none;
+    cursor: pointer;
+  }
+
+  .product-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 1rem;
+  }
+  .product-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--rl);
+    overflow: hidden;
+    transition: all 0.18s;
+    cursor: pointer;
+  }
+  .product-card:hover {
+    box-shadow: var(--shadow2);
+    border-color: var(--accent);
+  }
+  .product-img {
+    aspect-ratio: 1;
+    background: var(--surface2);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 3.2rem;
+    position: relative;
+    overflow: hidden;
+  }
+  .product-badge {
+    position: absolute; top: 0.5rem; left: 0.5rem;
+    background: var(--accent);
+    color: #fff;
+    font-size: 11px; font-weight: 700;
+    padding: 0.18rem 0.5rem;
+    border-radius: 4px;
+  }
+  .product-badge.green { background: var(--success); }
+  .product-info { padding: 0.85rem; }
+  .product-seller {
+    font-size: 11px;
+    color: var(--text3);
+    margin-bottom: 0.15rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .product-name {
+    font-family: var(--font-body);
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: var(--text);
+    margin-bottom: 0.3rem;
+    line-height: 1.35;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .product-stars {
+    display: flex; align-items: center; gap: 0.25rem;
+    font-size: 12px; color: #F5A623;
+    margin-bottom: 0.4rem;
+  }
+  .product-stars span { color: var(--text2); }
+  .product-footer { display: flex; justify-content: space-between; align-items: center; }
+  .product-price {
+    font-family: var(--font-head);
+    font-weight: 700;
+    font-size: 1.1rem;
+    color: var(--text);
+  }
+  .product-price-old {
+    font-size: 12px;
+    color: var(--text3);
+    text-decoration: line-through;
+    margin-left: 0.3rem;
+    font-weight: 400;
+  }
+  .add-cart-btn {
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: var(--r);
+    padding: 0.35rem 0.65rem;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s;
+    display: flex; align-items: center; gap: 0.2rem;
+  }
+  .add-cart-btn:hover { background: var(--accent2); }
+
+  /* PRODUCT DETAIL */
+  .product-detail { max-width: 1100px; margin: 0 auto; padding: 2rem; }
+  .back-link { display: inline-flex; align-items: center; gap: 0.4rem; color: var(--text2); font-size: 14px; cursor: pointer; margin-bottom: 1.5rem; transition: color 0.18s; }
+  .back-link:hover { color: var(--text); }
+  .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 3rem; align-items: start; }
+  @media (max-width: 700px) { .detail-grid { grid-template-columns: 1fr; } }
+  .detail-img { background: var(--surface2); border-radius: var(--rl); aspect-ratio: 1; display: flex; align-items: center; justify-content: center; font-size: 8rem; border: 1px solid var(--border); }
+  .detail-info { }
+  .detail-seller { font-size: 13px; color: var(--accent); font-weight: 500; margin-bottom: 0.5rem; }
+  .detail-title { font-family: var(--font-head); font-size: 2rem; font-weight: 800; line-height: 1.15; letter-spacing: -0.5px; margin-bottom: 0.75rem; }
+  .detail-stars { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem; }
+  .detail-price { font-family: var(--font-head); font-size: 2.2rem; font-weight: 800; color: var(--accent); margin-bottom: 1.5rem; }
+  .detail-desc { color: var(--text2); font-size: 0.95rem; line-height: 1.75; margin-bottom: 1.5rem; }
+  .detail-actions { display: flex; gap: 0.75rem; flex-wrap: wrap; }
+  .qty-ctrl { display: flex; align-items: center; border: 1px solid var(--border); border-radius: var(--r); overflow: hidden; }
+  .qty-ctrl button { background: var(--surface2); border: none; width: 36px; height: 40px; cursor: pointer; font-size: 16px; color: var(--text2); transition: background 0.15s; }
+  .qty-ctrl button:hover { background: var(--border); }
+  .qty-ctrl span { padding: 0 1rem; font-weight: 600; min-width: 40px; text-align: center; }
+  .btn-cart { background: var(--accent); color: #fff; border: none; border-radius: var(--r); padding: 0.65rem 1.75rem; font-family: var(--font-body); font-size: 15px; font-weight: 500; cursor: pointer; transition: background 0.18s; flex: 1; }
+  .btn-cart:hover { background: var(--accent2); }
+  .detail-tags { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 1.5rem; }
+  .tag { background: var(--surface2); color: var(--text2); border-radius: 100px; font-size: 12px; padding: 0.25rem 0.75rem; border: 1px solid var(--border); }
+
+  /* CART */
+  .cart-page { max-width: 1100px; margin: 0 auto; padding: 2rem; }
+  .cart-page h1 { font-family: var(--font-head); font-size: 2rem; font-weight: 800; margin-bottom: 1.5rem; letter-spacing: -0.5px; }
+  .cart-layout { display: grid; grid-template-columns: 1fr 360px; gap: 2rem; }
+  @media (max-width: 800px) { .cart-layout { grid-template-columns: 1fr; } }
+  .cart-items { }
+  .cart-item { background: var(--surface); border: 1px solid var(--border); border-radius: var(--rl); padding: 1.25rem; display: flex; gap: 1.25rem; margin-bottom: 0.75rem; align-items: center; }
+  .cart-item-img { width: 80px; height: 80px; background: var(--surface2); border-radius: var(--r); display: flex; align-items: center; justify-content: center; font-size: 2.5rem; flex-shrink: 0; }
+  .cart-item-info { flex: 1; }
+  .cart-item-name { font-family: var(--font-head); font-weight: 700; font-size: 1rem; margin-bottom: 0.2rem; }
+  .cart-item-seller { font-size: 12px; color: var(--text3); margin-bottom: 0.5rem; }
+  .cart-item-ctrl { display: flex; align-items: center; gap: 0.75rem; }
+  .cart-item-price { font-family: var(--font-head); font-weight: 700; font-size: 1.1rem; margin-left: auto; }
+  .remove-btn { background: none; border: none; color: var(--text3); cursor: pointer; font-size: 18px; transition: color 0.15s; padding: 0.25rem; }
+  .remove-btn:hover { color: var(--danger); }
+  .cart-summary { background: var(--surface); border: 1px solid var(--border); border-radius: var(--rl); padding: 1.5rem; height: fit-content; position: sticky; top: 74px; }
+  .cart-summary h3 { font-family: var(--font-head); font-weight: 700; font-size: 1.1rem; margin-bottom: 1.25rem; }
+  .summary-row { display: flex; justify-content: space-between; font-size: 14px; color: var(--text2); margin-bottom: 0.6rem; }
+  .summary-row.total { border-top: 1px solid var(--border); padding-top: 0.75rem; margin-top: 0.25rem; font-family: var(--font-head); font-weight: 700; font-size: 1.1rem; color: var(--text); }
+  .checkout-btn { width: 100%; background: var(--accent); color: #fff; border: none; border-radius: var(--r); padding: 0.8rem; font-family: var(--font-body); font-size: 15px; font-weight: 500; cursor: pointer; margin-top: 1.25rem; transition: background 0.18s; }
+  .checkout-btn:hover { background: var(--accent2); }
+  .promo-row { display: flex; gap: 0.5rem; margin-top: 1rem; }
+  .promo-row input { flex: 1; border: 1px solid var(--border); border-radius: var(--r); padding: 0.45rem 0.75rem; font-size: 13px; font-family: var(--font-body); outline: none; color: var(--text); background: var(--bg); }
+  .promo-row button { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--r); padding: 0.45rem 0.9rem; font-size: 13px; font-family: var(--font-body); cursor: pointer; transition: background 0.15s; color: var(--text); }
+  .promo-row button:hover { background: var(--border); }
+  .empty-cart { text-align: center; padding: 4rem 2rem; color: var(--text2); }
+  .empty-cart .empty-icon { font-size: 4rem; margin-bottom: 1rem; }
+  .empty-cart p { margin-bottom: 1.25rem; }
+
+  /* ORDERS */
+  .orders-page { max-width: 900px; margin: 0 auto; padding: 2rem; }
+  .orders-page h1 { font-family: var(--font-head); font-size: 2rem; font-weight: 800; margin-bottom: 1.5rem; letter-spacing: -0.5px; }
+  .order-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--rl); padding: 1.25rem 1.5rem; margin-bottom: 1rem; }
+  .order-header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1rem; padding-bottom: 1rem; border-bottom: 1px solid var(--border); }
+  .order-id { font-family: var(--font-head); font-weight: 700; font-size: 0.9rem; }
+  .order-date { font-size: 13px; color: var(--text2); }
+  .order-status { font-size: 12px; font-weight: 600; padding: 0.25rem 0.75rem; border-radius: 100px; }
+  .status-delivered { background: var(--success-bg); color: var(--success); }
+  .status-shipped { background: var(--warn-bg); color: var(--warn); }
+  .status-processing { background: #EEF0FA; color: #4A5CBF; }
+  .order-items { display: flex; gap: 0.75rem; margin-bottom: 0.75rem; flex-wrap: wrap; }
+  .order-item-thumb { display: flex; align-items: center; gap: 0.5rem; background: var(--bg); border-radius: var(--r); padding: 0.4rem 0.75rem; font-size: 13px; color: var(--text2); }
+  .order-footer { display: flex; justify-content: space-between; align-items: center; }
+  .order-total { font-family: var(--font-head); font-weight: 700; font-size: 1.05rem; }
+  .track-btn { background: none; border: 1px solid var(--border); border-radius: var(--r); padding: 0.35rem 0.85rem; font-size: 13px; cursor: pointer; font-family: var(--font-body); color: var(--text2); transition: all 0.15s; }
+  .track-btn:hover { border-color: var(--border2); color: var(--text); }
+
+  /* TRACKING MODAL */
+  .modal-bg { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 200; align-items: center; justify-content: center; }
+  .modal-bg.open { display: flex; }
+  .modal { background: var(--surface); border-radius: var(--rl); padding: 2rem; max-width: 500px; width: 90%; position: relative; max-height: 90vh; overflow-y: auto; }
+  .modal-close { position: absolute; top: 1rem; right: 1rem; background: none; border: none; font-size: 20px; cursor: pointer; color: var(--text2); transition: color 0.15s; }
+  .modal-close:hover { color: var(--text); }
+  .modal h3 { font-family: var(--font-head); font-weight: 700; font-size: 1.2rem; margin-bottom: 1.5rem; }
+  .track-steps { position: relative; padding-left: 1.5rem; }
+  .track-steps::before { content: ''; position: absolute; left: 7px; top: 8px; bottom: 8px; width: 2px; background: var(--border); }
+  .track-step { position: relative; margin-bottom: 1.5rem; }
+  .track-step::before { content: ''; position: absolute; left: -1.5rem; top: 4px; width: 14px; height: 14px; border-radius: 50%; background: var(--border); border: 2px solid var(--surface); }
+  .track-step.done::before { background: var(--success); }
+  .track-step.active::before { background: var(--accent); box-shadow: 0 0 0 3px rgba(0,100,210,0.18); }
+  .track-step-title { font-weight: 500; font-size: 14px; color: var(--text); }
+  .track-step-date { font-size: 12px; color: var(--text3); }
+  .track-step p { font-size: 13px; color: var(--text2); margin-top: 0.2rem; }
+
+  /* LOGIN */
+  .login-page { display: flex; align-items: center; justify-content: center; min-height: calc(100vh - 58px); padding: 2rem; }
+  .login-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--rl); padding: 2.5rem; max-width: 420px; width: 100%; box-shadow: var(--shadow2); }
+  .login-card h2 { font-family: var(--font-head); font-weight: 800; font-size: 1.75rem; margin-bottom: 0.4rem; letter-spacing: -0.5px; }
+  .login-card p { color: var(--text2); font-size: 14px; margin-bottom: 2rem; }
+  .tabs { display: flex; gap: 0; border: 1px solid var(--border); border-radius: var(--r); overflow: hidden; margin-bottom: 1.5rem; }
+  .tab { flex: 1; background: none; border: none; padding: 0.6rem; font-family: var(--font-body); font-size: 14px; cursor: pointer; color: var(--text2); transition: all 0.15s; }
+  .tab.active { background: var(--accent); color: #fff; }
+  .form-group { margin-bottom: 1rem; }
+  .form-group label { display: block; font-size: 13px; font-weight: 500; color: var(--text2); margin-bottom: 0.4rem; }
+  .form-group input, .form-group select { width: 100%; border: 1px solid var(--border); border-radius: var(--r); padding: 0.6rem 0.85rem; font-family: var(--font-body); font-size: 14px; color: var(--text); background: var(--bg); outline: none; transition: border 0.15s; }
+  .form-group input:focus, .form-group select:focus { border-color: var(--accent); background: var(--surface); box-shadow: 0 0 0 3px rgba(0,100,210,0.12); }
+  .form-submit { width: 100%; background: var(--accent); color: #fff; border: none; border-radius: var(--r); padding: 0.75rem; font-family: var(--font-body); font-size: 15px; font-weight: 600; cursor: pointer; margin-top: 0.5rem; transition: background 0.18s; }
+  .form-submit:hover { background: var(--accent2); }
+  .form-divider { text-align: center; color: var(--text3); font-size: 13px; margin: 1rem 0; position: relative; }
+  .form-divider::before, .form-divider::after { content: ''; position: absolute; top: 50%; width: 40%; height: 1px; background: var(--border); }
+  .form-divider::before { left: 0; } .form-divider::after { right: 0; }
+  .sell-badge { background: var(--accent-light); border: 1px solid rgba(0,100,210,0.2); border-radius: var(--r); padding: 0.75rem 1rem; font-size: 13px; color: var(--accent); margin-top: 1.25rem; text-align: center; }
+  .role-btns { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
+  .role-btn { flex: 1; background: var(--bg); border: 1px solid var(--border); border-radius: var(--r); padding: 0.5rem; font-family: var(--font-body); font-size: 13px; cursor: pointer; text-align: center; transition: all 0.15s; color: var(--text2); }
+  .role-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+  /* ADMIN */
+  .admin-layout { display: grid; grid-template-columns: 220px 1fr; min-height: calc(100vh - 58px); align-items: start; }
+  .admin-sidebar { background: #1A1A1A; color: #fff; padding: 1.25rem 0; position: sticky; top: 0; height: calc(100vh - 0px); overflow-y: auto; display: flex; flex-direction: column; }
+  .admin-logo { font-family: var(--font-head); font-size: 0.75rem; font-weight: 700; color: rgba(255,255,255,0.3); text-transform: uppercase; letter-spacing: 0.12em; padding: 0 1.25rem 0.75rem; margin-bottom: 0.25rem; border-bottom: 1px solid rgba(255,255,255,0.07); }
+  .admin-nav { display: flex; flex-direction: column; width: 100%; flex: 1; }
+  .admin-nav a { display: flex; align-items: center; gap: 0.7rem; padding: 0.7rem 1.25rem; font-size: 13.5px; font-family: var(--font-body); color: rgba(255,255,255,0.55); cursor: pointer; transition: all 0.15s; text-decoration: none; border-left: 3px solid transparent; margin: 0.05rem 0; }
+  .admin-nav a:hover { color: #fff; background: rgba(255,255,255,0.07); border-left-color: rgba(255,255,255,0.2); }
+  .admin-nav a.active { color: #fff; background: rgba(255,255,255,0.1); border-left-color: var(--accent2); font-weight: 600; }
+  .admin-nav a svg { opacity: 0.65; flex-shrink: 0; }
+  .admin-nav a.active svg { opacity: 1; }
+  .admin-nav .nav-spacer { flex: 1; }
+  .admin-nav .nav-divider { height: 1px; background: rgba(255,255,255,0.07); margin: 0.5rem 1.25rem; }
+  .admin-main { background: var(--bg); padding: 2rem; overflow-y: auto; }
+  .admin-main h2 { font-family: var(--font-head); font-size: 1.5rem; font-weight: 800; margin-bottom: 1.5rem; letter-spacing: -0.5px; }
+  .admin-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 2rem; }
+  @media (max-width: 900px) { .admin-stats { grid-template-columns: repeat(2, 1fr); } .admin-layout { grid-template-columns: 1fr; } .admin-sidebar { display: none; } }
+  .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--rl); padding: 1.25rem 1.5rem; }
+  .stat-label { font-size: 12px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 0.35rem; }
+  .stat-val { font-family: var(--font-head); font-size: 2rem; font-weight: 800; letter-spacing: -1px; }
+  .stat-sub { font-size: 12px; color: var(--success); margin-top: 0.2rem; }
+  .stat-sub.down { color: var(--danger); }
+  .admin-table-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: var(--rl); overflow: hidden; margin-bottom: 2rem; }
+  .admin-table-head { padding: 1rem 1.5rem; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+  .admin-table-head h3 { font-family: var(--font-head); font-weight: 700; font-size: 1rem; }
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text3); padding: 0.75rem 1.5rem; background: var(--bg); border-bottom: 1px solid var(--border); }
+  td { padding: 0.9rem 1.5rem; font-size: 14px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: var(--bg); }
+  .table-name { font-weight: 500; font-family: var(--font-head); }
+  .badge { display: inline-block; font-size: 11px; font-weight: 600; padding: 0.2rem 0.6rem; border-radius: 100px; }
+  .badge-success { background: var(--success-bg); color: var(--success); }
+  .badge-warn { background: var(--warn-bg); color: var(--warn); }
+  .badge-info { background: #EEF0FA; color: #4A5CBF; }
+  .badge-danger { background: var(--danger-bg); color: var(--danger); }
+  .action-btns { display: flex; gap: 0.4rem; }
+  .tbl-btn { background: none; border: 1px solid var(--border); border-radius: 6px; padding: 0.25rem 0.65rem; font-size: 12px; cursor: pointer; font-family: var(--font-body); color: var(--text2); transition: all 0.15s; }
+  .tbl-btn:hover { border-color: var(--border2); color: var(--text); }
+  .tbl-btn.red { color: var(--danger); border-color: rgba(192,41,42,0.2); }
+  .tbl-btn.red:hover { background: var(--danger-bg); }
+  .add-product-form { background: var(--surface); border: 1px solid var(--border); border-radius: var(--rl); padding: 1.5rem; margin-bottom: 2rem; }
+  .add-product-form h3 { font-family: var(--font-head); font-weight: 700; margin-bottom: 1.25rem; }
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  @media (max-width: 700px) { .form-grid { grid-template-columns: 1fr; } }
+  .form-grid textarea { grid-column: 1 / -1; }
+  .form-group textarea { width: 100%; border: 1px solid var(--border); border-radius: var(--r); padding: 0.6rem 0.85rem; font-family: var(--font-body); font-size: 14px; color: var(--text); background: var(--bg); outline: none; resize: vertical; min-height: 80px; transition: border 0.15s; }
+  .form-group textarea:focus { border-color: var(--border2); background: var(--surface); }
+  .emoji-picker { display: flex; gap: 0.5rem; flex-wrap: wrap; padding: 0.5rem 0; }
+  .emoji-opt { font-size: 1.4rem; cursor: pointer; padding: 0.25rem; border-radius: 6px; transition: background 0.15s; }
+  .emoji-opt:hover, .emoji-opt.selected { background: var(--surface2); }
+
+  /* TOAST */
+  .toast-wrap { position: fixed; bottom: 2rem; right: 2rem; z-index: 300; display: flex; flex-direction: column; gap: 0.5rem; }
+  .toast { background: var(--text); color: #fff; padding: 0.75rem 1.25rem; border-radius: var(--r); font-size: 14px; box-shadow: var(--shadow2); animation: slideIn 0.25s ease; max-width: 280px; }
+  .toast.success { background: var(--success); }
+  .toast.error { background: var(--danger); }
+  @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+
+  /* USER BADGE & PROFILE DROPDOWN */
+  #user-area { position: relative; display: flex; align-items: center; z-index: 400; }
+  .user-pill-btn {
+    display: inline-flex; align-items: center; gap: 0.5rem;
+    background: none; border: 1px solid var(--border);
+    color: var(--text); border-radius: var(--r);
+    padding: 0.3rem 0.65rem 0.3rem 0.35rem;
+    font-family: var(--font-body); font-size: 13px;
+    cursor: pointer; transition: all 0.15s;
+    height: 38px; white-space: nowrap;
+  }
+  .user-pill-btn:hover { background: var(--accent-light); border-color: var(--accent); color: var(--accent); }
+  .user-avatar {
+    width: 26px; height: 26px; background: var(--accent);
+    border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
+    font-family: var(--font-head); font-weight: 700; font-size: 10px; color: #fff; flex-shrink: 0;
+  }
+  .profile-caret { font-size: 9px; opacity: 0.6; margin-left: 0.15rem; transition: transform 0.2s; }
+  #user-area.open .profile-caret { transform: rotate(180deg); }
+  .profile-dropdown { position: absolute; top: calc(100% + 8px); right: 0; min-width: 200px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--rl); box-shadow: var(--shadow2); z-index: 200; overflow: hidden; display: none; animation: dropIn 0.18s ease; }
+  #user-area.open .profile-dropdown { display: block; }
+  @keyframes dropIn { from { opacity:0; transform:translateY(-6px) scale(0.98); } to { opacity:1; transform:translateY(0) scale(1); } }
+  .pd-header { padding: 0.9rem 1rem; border-bottom: 1px solid var(--border); background: var(--bg); }
+  .pd-name { font-family: var(--font-head); font-weight: 700; font-size: 14px; color: var(--text); }
+  .pd-role { font-size: 11px; color: var(--text2); margin-top: 0.1rem; text-transform: capitalize; }
+  .pd-item { display: flex; align-items: center; gap: 0.6rem; padding: 0.65rem 1rem; font-size: 13px; color: var(--text2); cursor: pointer; transition: background 0.15s; border: none; background: none; width: 100%; text-align: left; font-family: var(--font-body); }
+  .pd-item:hover { background: var(--bg); color: var(--text); }
+  .pd-item svg { flex-shrink: 0; opacity: 0.6; }
+  .pd-divider { height: 1px; background: var(--border); margin: 0.25rem 0; }
+  .pd-item.danger { color: var(--danger); }
+  .pd-item.danger:hover { background: var(--danger-bg); }
+
+  /* BECOME SELLER */
+  .become-seller-page { max-width: 720px; margin: 0 auto; padding: 4rem 2rem; text-align: center; }
+  .become-seller-page h1 { font-family: var(--font-head); font-size: 2.5rem; font-weight: 800; letter-spacing: -1px; margin-bottom: 1rem; }
+  .become-seller-page p { color: var(--text2); font-size: 1.05rem; margin-bottom: 2rem; }
+
+  /* ── SHARED CONTENT PAGE ── */
+  .content-page { max-width: 960px; margin: 0 auto; padding: 2rem 1.5rem 3rem; }
+  .content-page h1 { font-family: var(--font-head); font-size: 1.75rem; font-weight: 800; margin-bottom: 0.35rem; letter-spacing: -0.4px; }
+  .content-page .page-sub { color: var(--text2); font-size: 14px; margin-bottom: 1.75rem; }
+  .content-card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--rl);
+    padding: 1.5rem; margin-bottom: 1.25rem;
+  }
+  .content-card h3 { font-family: var(--font-head); font-weight: 700; font-size: 1rem; margin-bottom: 1rem; }
+  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  @media (max-width: 600px) { .form-row { grid-template-columns: 1fr; } }
+
+  /* Profile */
+  .profile-header {
+    display: flex; align-items: center; gap: 1.25rem; margin-bottom: 1.5rem;
+  }
+  .profile-avatar-lg {
+    width: 72px; height: 72px; border-radius: 50%; background: var(--accent);
+    color: #fff; font-family: var(--font-head); font-weight: 800; font-size: 1.5rem;
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  }
+  .profile-meta h2 { font-family: var(--font-head); font-size: 1.35rem; font-weight: 800; margin-bottom: 0.15rem; }
+  .profile-meta .role-pill {
+    display: inline-block; font-size: 11px; font-weight: 600; padding: 0.2rem 0.65rem;
+    border-radius: 100px; background: var(--accent-light); color: var(--accent);
+  }
+
+  /* Deals */
+  .deals-banner {
+    background: linear-gradient(135deg, #0064D2, #004E9A);
+    color: #fff; border-radius: var(--rl); padding: 1.75rem 2rem; margin-bottom: 1.5rem;
+  }
+  .deals-banner h2 { font-family: var(--font-head); font-size: 1.5rem; font-weight: 800; margin-bottom: 0.35rem; }
+  .deals-banner p { opacity: 0.85; font-size: 14px; }
+
+  /* Checkout */
+  .checkout-layout { display: grid; grid-template-columns: 1fr 340px; gap: 1.5rem; }
+  @media (max-width: 800px) { .checkout-layout { grid-template-columns: 1fr; } }
+  .pay-method {
+    display: flex; align-items: center; gap: 0.75rem; padding: 0.85rem 1rem;
+    border: 1.5px solid var(--border); border-radius: var(--r); cursor: pointer;
+    margin-bottom: 0.5rem; transition: all 0.15s;
+  }
+  .pay-method:hover, .pay-method.selected { border-color: var(--accent); background: var(--accent-light); }
+  .pay-method input { accent-color: var(--accent); }
+
+  /* Watchlist */
+  .wl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 1rem; }
+  .wl-heart {
+    position: absolute; top: 0.5rem; right: 0.5rem; width: 32px; height: 32px;
+    border-radius: 50%; background: rgba(255,255,255,0.9); border: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center; cursor: pointer;
+    font-size: 14px; z-index: 2; transition: transform 0.15s;
+  }
+  .wl-heart:hover { transform: scale(1.1); }
+  .wl-heart.active { color: var(--danger); }
+
+  /* Notifications */
+  .notif-item {
+    display: flex; gap: 0.85rem; padding: 1rem 0; border-bottom: 1px solid var(--border);
+  }
+  .notif-item:last-child { border-bottom: none; }
+  .notif-icon {
+    width: 36px; height: 36px; border-radius: 50%; background: var(--accent-light);
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 1rem;
+  }
+  .notif-body { flex: 1; }
+  .notif-body strong { font-size: 13.5px; display: block; margin-bottom: 0.15rem; }
+  .notif-body p { font-size: 13px; color: var(--text2); margin: 0; }
+  .notif-time { font-size: 11px; color: var(--text3); white-space: nowrap; }
+
+  /* Help FAQ */
+  .faq-item { border-bottom: 1px solid var(--border); }
+  .faq-q {
+    width: 100%; text-align: left; background: none; border: none; padding: 1rem 0;
+    font-family: var(--font-body); font-size: 14.5px; font-weight: 600; color: var(--text);
+    cursor: pointer; display: flex; justify-content: space-between; align-items: center;
+  }
+  .faq-q:hover { color: var(--accent); }
+  .faq-a { display: none; padding: 0 0 1rem; font-size: 14px; color: var(--text2); line-height: 1.65; }
+  .faq-item.open .faq-a { display: block; }
+  .faq-item.open .faq-q span { transform: rotate(180deg); }
+
+  /* Settings toggles */
+  .setting-row {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 0.9rem 0; border-bottom: 1px solid var(--border);
+  }
+  .setting-row:last-child { border-bottom: none; }
+  .setting-label { font-size: 14px; font-weight: 500; }
+  .setting-desc { font-size: 12px; color: var(--text3); margin-top: 0.15rem; }
+  .toggle {
+    width: 44px; height: 24px; border-radius: 12px; background: var(--border);
+    position: relative; cursor: pointer; border: none; transition: background 0.2s; flex-shrink: 0;
+  }
+  .toggle.on { background: var(--accent); }
+  .toggle::after {
+    content: ''; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px;
+    border-radius: 50%; background: #fff; transition: transform 0.2s; box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+  }
+  .toggle.on::after { transform: translateX(20px); }
+
+  .nav-icon-btn {
+    position: relative; background: none; border: 1px solid transparent; color: var(--text);
+    border-radius: var(--r); padding: 0.45rem 0.65rem; cursor: pointer; height: 38px;
+    display: inline-flex; align-items: center; gap: 0.25rem; font-size: 13px; font-family: var(--font-body);
+  }
+  .nav-icon-btn:hover { background: var(--accent-light); color: var(--accent); }
+  .notif-badge {
+    position: absolute; top: 2px; right: 2px; width: 8px; height: 8px;
+    background: var(--danger); border-radius: 50%; border: 1.5px solid #fff;
+  }
+  .perks { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.25rem; text-align: left; margin-bottom: 2.5rem; }
+  @media (max-width: 600px) { .perks { grid-template-columns: 1fr; } }
+  .perk { background: var(--surface); border: 1px solid var(--border); border-radius: var(--rl); padding: 1.25rem; }
+  .perk-icon { font-size: 1.75rem; margin-bottom: 0.75rem; }
+  .perk h4 { font-family: var(--font-head); font-weight: 700; margin-bottom: 0.25rem; }
+  .perk p { font-size: 13px; color: var(--text2); }
+
+  .no-results { text-align: center; padding: 4rem 2rem; color: var(--text2); grid-column: 1/-1; }
+
+</style>
+</head>
+<body>
+
+<!-- TOP UTILITY BAR -->
+<div class="top-bar">
+  <div class="top-bar-left" id="top-bar-left">
+    <span>Hai!</span>
+    <button onclick="showPage('login')">Masuk</button>
+    <span class="sep">|</span>
+    <button onclick="showPage('login')">Daftar</button>
+    <span class="sep">|</span>
+    <button onclick="showPage('deals')">Deals</button>
+    <span class="sep">|</span>
+    <button onclick="showPage('help')">Bantuan</button>
+  </div>
+  <div class="top-bar-right">
+    <button onclick="showPage('become-seller')">Jual</button>
+    <span class="sep">|</span>
+    <button onclick="showPage('watchlist')">Watchlist</button>
+    <span class="sep">|</span>
+    <button onclick="showPage('orders')" id="orders-btn" style="display:none">Pesanan Saya</button>
+    <button onclick="showPage('cart')">Keranjang</button>
+  </div>
+</div>
+
+<!-- MAIN HEADER -->
+<header class="main-header">
+  <div class="nav-logo" onclick="showPage('store')">YourShop<span>.Id</span></div>
+  <div class="nav-search">
+    <select class="search-cat-select" id="search-cat" onchange="if(this.value!=='All')filterCategory(this.value, null)">
+      <option value="All">Semua Kategori</option>
+      <option value="Elektronik">Elektronik</option>
+      <option value="Fashion">Fashion</option>
+      <option value="Rumah">Rumah</option>
+      <option value="Buku">Buku</option>
+      <option value="Olahraga">Olahraga</option>
+      <option value="Makanan">Makanan</option>
+      <option value="Seni">Seni</option>
+    </select>
+    <input type="text" placeholder="Cari produk, merek, atau penjual..." id="nav-search-input" oninput="handleSearch(this.value)" onclick="showPage('store')">
+    <button class="search-btn" onclick="showPage('store'); handleSearch(document.getElementById('nav-search-input').value)" title="Cari">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+    </button>
+  </div>
+  <div class="nav-actions">
+    <button class="nav-icon-btn" onclick="showPage('notifications')" title="Notifikasi" id="notif-nav-btn">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+      <span class="notif-badge" id="notif-badge" style="display:none"></span>
+    </button>
+    <button class="nav-icon-btn" onclick="showPage('watchlist')" title="Watchlist">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/></svg>
+    </button>
+    <button class="nav-btn" onclick="showPage('cart')" id="cart-nav-btn">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 001.99 1.61h9.72a2 2 0 001.99-1.61L23 6H6"/></svg>
+      Keranjang <span class="cart-count" id="cart-count">0</span>
+    </button>
+    <div id="user-area">
+      <button class="nav-btn" onclick="showPage('login')">Masuk</button>
+    </div>
+  </div>
+</header>
+
+<!-- CATEGORY BAR -->
+<div class="cat-bar" id="category-tabs">
+  <button class="cat-bar-item active" onclick="filterCategory('All', this)">Semua</button>
+  <button class="cat-bar-item" onclick="filterCategory('Elektronik', this)">Elektronik</button>
+  <button class="cat-bar-item" onclick="filterCategory('Fashion', this)">Fashion</button>
+  <button class="cat-bar-item" onclick="filterCategory('Rumah', this)">Rumah &amp; Taman</button>
+  <button class="cat-bar-item" onclick="filterCategory('Buku', this)">Buku</button>
+  <button class="cat-bar-item" onclick="filterCategory('Olahraga', this)">Olahraga</button>
+  <button class="cat-bar-item" onclick="filterCategory('Makanan', this)">Makanan</button>
+  <button class="cat-bar-item" onclick="filterCategory('Seni', this)">Seni &amp; Koleksi</button>
+</div>
+
+<!-- STORE PAGE -->
+<div class="page active" id="page-store">
+  <div class="hero">
+    <div class="hero-tag">Marketplace Terbuka · Penjual Terverifikasi</div>
+    <h1>Cari. Belanja. <em>Jual.</em></h1>
+    <p>Ribuan produk dari penjual independen. Temukan yang kamu cari — atau mulai berjualan hari ini.</p>
+    <div class="hero-cta">
+      <button class="btn btn-primary" onclick="document.querySelector('.shop-layout').scrollIntoView({behavior:'smooth'})">Lihat Produk</button>
+      <button class="btn btn-outline" onclick="showPage('become-seller')">Mulai Berjualan →</button>
+    </div>
+  </div>
+
+  <div class="content-page" style="max-width:1280px;padding-bottom:0" id="featured-section">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
+      <h2 style="font-family:var(--font-head);font-size:1.25rem;font-weight:800;margin:0">⭐ Produk Unggulan</h2>
+      <button class="tbl-btn" onclick="showPage('deals')">Lihat Deals →</button>
+    </div>
+    <div class="product-grid" id="featured-grid"></div>
+  </div>
+
+  <div class="shop-layout">
+    <aside class="sidebar">
+      <div class="sidebar-block">
+        <h4>Rentang Harga</h4>
+        <div class="price-range">
+          <input type="number" placeholder="Min Rp" id="price-min" oninput="applyFilters()" min="0" step="any">
+          <input type="number" placeholder="Maks Rp" id="price-max" oninput="applyFilters()" min="0" step="any">
+        </div>
+      </div>
+      <div class="sidebar-block">
+        <h4>Rating</h4>
+        <div class="filter-group">
+          <label class="filter-item"><input type="radio" name="rating" value="0" checked onchange="applyFilters()"> Semua rating</label>
+          <label class="filter-item"><input type="radio" name="rating" value="4" onchange="applyFilters()"> ⭐ 4+ bintang</label>
+          <label class="filter-item"><input type="radio" name="rating" value="4.5" onchange="applyFilters()"> ⭐ 4.5+ bintang</label>
+        </div>
+      </div>
+      <div class="sidebar-block">
+        <h4>Ketersediaan</h4>
+        <div class="filter-group">
+          <label class="filter-item"><input type="checkbox" id="in-stock" onchange="applyFilters()"> Stok Tersedia</label>
+          <label class="filter-item"><input type="checkbox" id="on-sale" onchange="applyFilters()"> Sedang Diskon</label>
+        </div>
+      </div>
+    </aside>
+
+    <main>
+      <div class="products-header">
+        <h2 id="products-title">Semua Produk</h2>
+        <select class="sort-select" id="sort-select" onchange="applyFilters()">
+          <option value="default">Urutan: Default</option>
+          <option value="price-asc">Harga: Terendah</option>
+          <option value="price-desc">Harga: Tertinggi</option>
+          <option value="rating">Rating Tertinggi</option>
+          <option value="newest">Terbaru</option>
+        </select>
+      </div>
+      <div class="product-grid" id="product-grid"></div>
+    </main>
+  </div>
+</div>
+
+<!-- PRODUCT DETAIL PAGE -->
+<div class="page" id="page-detail">
+  <div class="product-detail">
+    <div class="back-link" onclick="showPage('store')">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+      Kembali ke Toko
+    </div>
+    <div class="detail-grid" id="detail-content"></div>
+  </div>
+</div>
+
+<!-- CART PAGE -->
+<div class="page" id="page-cart">
+  <div class="cart-page">
+    <h1>Keranjang Belanja</h1>
+    <div id="cart-content"></div>
+  </div>
+</div>
+
+<!-- ORDERS PAGE -->
+<div class="page" id="page-orders">
+  <div class="orders-page">
+    <h1>Pesanan Saya</h1>
+    <div id="orders-content"></div>
+  </div>
+</div>
+
+<!-- LOGIN PAGE -->
+<div class="page" id="page-login">
+  <div class="login-page">
+    <div class="login-card">
+      <h2>Selamat Datang</h2>
+      <p>Masuk ke akun YourShop.Id kamu untuk melanjutkan</p>
+      <div class="tabs">
+        <button class="tab active" onclick="switchTab('login-tab', this)">Masuk</button>
+        <button class="tab" onclick="switchTab('register-tab', this)">Daftar</button>
+      </div>
+      <div id="login-tab">
+        <div class="form-group"><label>Email</label><input type="email" id="login-email" placeholder="kamu@contoh.com"></div>
+        <div class="form-group"><label>Kata Sandi</label><input type="password" id="login-pass" placeholder="••••••••"></div>
+        <button class="form-submit" onclick="doLogin()">Masuk</button>
+        <p style="font-size:12px;color:var(--accent);margin:0.65rem 0 0;text-align:center;cursor:pointer" onclick="switchTab('forgot-tab', null);document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'))">Lupa kata sandi?</p>
+        <p style="font-size:12px;color:var(--text3);margin:0.5rem 0 0.75rem;text-align:center">Akun demo: password <code>demo</code></p>
+        <div class="form-divider">atau coba akun demo</div>
+        <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+          <button class="btn btn-sm btn-outline" style="border-color:var(--border);color:var(--text2);" onclick="demoLogin('buyer')">👤 Demo Pembeli</button>
+          <button class="btn btn-sm btn-outline" style="border-color:var(--border);color:var(--text2);" onclick="demoLogin('seller')">🏪 Demo Penjual</button>
+          <button class="btn btn-sm btn-outline" style="border-color:var(--border);color:var(--text2);" onclick="demoLogin('admin')">🛡 Demo Admin</button>
+        </div>
+      </div>
+      <div id="forgot-tab" style="display:none">
+        <p style="font-size:13px;color:var(--text2);margin-bottom:1rem">Masukkan email akun. Token reset akan ditampilkan (mode demo).</p>
+        <div class="form-group"><label>Email</label><input type="email" id="forgot-email" placeholder="kamu@contoh.com"></div>
+        <button class="form-submit" onclick="doForgotPassword()">Kirim Reset</button>
+        <div id="forgot-result" style="display:none;margin-top:1rem">
+          <div class="form-group"><label>Token Reset (demo)</label><input type="text" id="reset-token" readonly></div>
+          <div class="form-group"><label>Kata Sandi Baru</label><input type="password" id="reset-pass" placeholder="Min 4 karakter"></div>
+          <button class="form-submit" onclick="doResetPassword()">Reset Kata Sandi</button>
+        </div>
+        <p style="font-size:12px;color:var(--accent);margin-top:0.75rem;text-align:center;cursor:pointer" onclick="switchTab('login-tab', document.querySelector('.tab'))">← Kembali masuk</p>
+      </div>
+      <div id="register-tab" style="display:none">
+        <div class="role-btns">
+          <button class="role-btn active" id="role-buyer" onclick="selectRole('buyer')">🛍 Saya ingin membeli</button>
+          <button class="role-btn" id="role-seller" onclick="selectRole('seller')">🏪 Saya ingin berjualan</button>
+        </div>
+        <div class="form-grid">
+          <div class="form-group"><label>Nama Depan</label><input type="text" id="reg-first" placeholder="Budi"></div>
+          <div class="form-group"><label>Nama Belakang</label><input type="text" id="reg-last" placeholder="Santoso"></div>
+        </div>
+        <div class="form-group"><label>Email</label><input type="email" id="reg-email" placeholder="kamu@contoh.com"></div>
+        <div class="form-group"><label>Kata Sandi</label><input type="password" id="reg-pass" placeholder="Min 4 karakter"></div>
+        <div id="seller-fields" style="display:none">
+          <div class="form-group"><label>Nama Toko</label><input type="text" id="reg-shop" placeholder="Toko Keren Saya"></div>
+          <div class="form-group"><label>Kategori</label>
+            <select id="reg-cat"><option>Elektronik</option><option>Fashion</option><option>Rumah</option><option>Buku</option><option>Olahraga</option><option>Makanan</option><option>Seni</option></select>
+          </div>
+        </div>
+        <button class="form-submit" onclick="doRegister()">Buat Akun</button>
+        <div class="sell-badge">🎉 Penjual dapat <strong>0% komisi</strong> selama 3 bulan pertama!</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- BECOME SELLER PAGE -->
+<div class="page" id="page-become-seller">
+  <div class="become-seller-page">
+    <div style="font-size:3rem;margin-bottom:1rem">🏪</div>
+    <h1>Mulai Berjualan di YourShop.Id</h1>
+    <p>Bergabung dengan ribuan penjual yang menjangkau jutaan pembeli. Tanpa biaya tersembunyi, tanpa kerumitan — hanya hasil nyata.</p>
+    <div class="perks">
+      <div class="perk"><div class="perk-icon">💰</div><h4>0% Biaya selama 90 hari</h4><p>Simpan semua penghasilan kamu selama 3 bulan pertama. Tanpa syarat tersembunyi.</p></div>
+      <div class="perk"><div class="perk-icon">📊</div><h4>Analitik Real-time</h4><p>Dashboard lengkap dengan data penjualan, trafik, dan konversi.</p></div>
+      <div class="perk"><div class="perk-icon">🚀</div><h4>Listing Instan</h4><p>Langsung tayang dalam hitungan menit. Upload produk dan mulai berjualan segera.</p></div>
+      <div class="perk"><div class="perk-icon">🛡</div><h4>Perlindungan Penjual</h4><p>Pencegahan penipuan dan pembayaran aman yang didukung oleh kami.</p></div>
+      <div class="perk"><div class="perk-icon">📦</div><h4>Alat Pengiriman</h4><p>Cetak label terintegrasi dan pelacakan pesanan secara real-time.</p></div>
+      <div class="perk"><div class="perk-icon">💬</div><h4>Dukungan 24/7</h4><p>Tim dukungan penjual khusus, selalu siap membantu.</p></div>
+    </div>
+    <button class="btn btn-primary" style="font-size:1rem;padding:0.8rem 2.5rem" onclick="showPage('login');switchTab('register-tab',document.querySelectorAll('.tab')[1]);selectRole('seller')">Mulai Berjualan Gratis →</button>
+  </div>
+</div>
+
+<!-- ADMIN PAGE -->
+<div class="page" id="page-admin">
+  <div class="admin-layout">
+    <div class="admin-sidebar">
+      <div class="admin-logo" id="admin-logo-text">Admin YourShop.Id</div>
+      <nav class="admin-nav">
+        <a class="active" onclick="showAdminTab('dashboard',this)">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+          Dasbor
+        </a>
+        <a onclick="showAdminTab('products',this)">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>
+          Produk
+        </a>
+        <a onclick="showAdminTab('orders-admin',this)">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+          Pesanan
+        </a>
+        <a onclick="showAdminTab('sellers-admin',this)" id="admin-nav-sellers">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+          Penjual
+        </a>
+        <div class="nav-spacer"></div>
+        <div class="nav-divider"></div>
+        <a onclick="showPage('store')" style="color:rgba(255,255,255,0.4);font-size:13px;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+          Kembali ke Toko
+        </a>
+      </nav>
+    </div>
+    <div class="admin-main" id="admin-main-content"></div>
+  </div>
+</div>
+
+<!-- PROFILE PAGE -->
+<div class="page" id="page-profile">
+  <div class="content-page" id="profile-content"></div>
+</div>
+
+<!-- SETTINGS PAGE -->
+<div class="page" id="page-settings">
+  <div class="content-page" id="settings-content"></div>
+</div>
+
+<!-- HELP PAGE -->
+<div class="page" id="page-help">
+  <div class="content-page" id="help-content"></div>
+</div>
+
+<!-- DEALS PAGE -->
+<div class="page" id="page-deals">
+  <div class="content-page" style="max-width:1280px" id="deals-content"></div>
+</div>
+
+<!-- CHECKOUT PAGE -->
+<div class="page" id="page-checkout">
+  <div class="content-page" style="max-width:1100px" id="checkout-content"></div>
+</div>
+
+<!-- PAYMENT GATEWAY PAGE -->
+<div class="page" id="page-payment">
+  <div class="content-page" style="max-width:640px" id="payment-content"></div>
+</div>
+
+<!-- WATCHLIST PAGE -->
+<div class="page" id="page-watchlist">
+  <div class="content-page" style="max-width:1100px" id="watchlist-content"></div>
+</div>
+
+<!-- NOTIFICATIONS PAGE -->
+<div class="page" id="page-notifications">
+  <div class="content-page" id="notifications-content"></div>
+</div>
+
+<!-- TRACKING MODAL -->
+<div class="modal-bg" id="track-modal">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal()">✕</button>
+    <div id="modal-content"></div>
+  </div>
+</div>
+
+<div class="toast-wrap" id="toasts"></div>
+
+<script src="config.js"></script>
+<script src="assets.js"></script>
+<script src="main.js"></script>
+
+</body>
+</html>

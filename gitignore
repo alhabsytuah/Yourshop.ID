@@ -1,0 +1,24 @@
+# Build
+server
+server.exe
+*.o
+*.out
+
+# Runtime data
+ysi_data.json
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp
+*~
+.idea/
+.vscode/
+
+# Optional local overrides
+config.local.js
+.env
+.env.*
+
+# Logs
+*.log
