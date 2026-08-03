@@ -22,3 +22,8 @@ config.local.js
 
 # Logs
 *.log
+
+# TLS certs (local)
+certs/
+*.key
+*.crt

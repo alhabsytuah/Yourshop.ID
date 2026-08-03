@@ -122,6 +122,16 @@ function productImageHTML(p, className = '') {
     return `<img class="${className}" src="${p.imageUrl}" alt="${p.name || ''}" style="width:100%;height:100%;object-fit:cover;border-radius:inherit" onerror="this.style.display='none';this.nextElementSibling&&(this.nextElementSibling.style.display='flex')">
       <span class="img-fallback" style="display:none;width:100%;height:100%;align-items:center;justify-content:center;font-size:3rem">${p.emoji || '📦'}</span>`;
   }
+  // assets.js category placeholder
+  if (typeof YourShopAssets !== 'undefined' && YourShopAssets.CATEGORY_PLACEHOLDERS) {
+    const ph = YourShopAssets.CATEGORY_PLACEHOLDERS[p.category] || YourShopAssets.CATEGORY_PLACEHOLDERS.default;
+    if (ph) {
+      return `<img class="${className}" src="${ph}" alt="${p.name || ''}" style="width:100%;height:100%;object-fit:cover;border-radius:inherit">`;
+    }
+  }
+  if (typeof YourShopAssets !== 'undefined' && YourShopAssets.productPlaceholder) {
+    return `<img class="${className}" src="${YourShopAssets.productPlaceholder(p.emoji || '📦')}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:inherit">`;
+  }
   return `<span style="font-size:inherit">${p.emoji || '📦'}</span>`;
 }
 
@@ -538,6 +548,9 @@ function showPage(name) {
   if (name === 'store')         { renderProducts(); renderFeatured(); }
   if (name === 'profile')       renderProfile();
   if (name === 'settings')      renderSettings();
+  if (name === 'terms')         renderTerms();
+  if (name === 'privacy')       renderPrivacy();
+  if (name === 'contact')       renderContact();
   if (name === 'help')          renderHelp();
   if (name === 'deals')         renderDeals();
   if (name === 'checkout')      renderCheckout();
@@ -1662,6 +1675,54 @@ function showAdminTab(tab, el) {
   renderAdmin(tab);
 }
 
+
+function renderAdminLocalDashboard(el, isSeller, sellerName) {
+  const mine = isSeller
+    ? ordersList.filter(o => (o.items||[]).some(i => {
+        const pr = adminProducts.find(x => x.id === i.productId);
+        return pr && (pr.seller === sellerName || pr.seller === currentUser?.name);
+      }))
+    : ordersList;
+  const revenue = mine.reduce((s, o) => s + (o.total || 0), 0);
+  const payout = mine.reduce((s, o) => s + (o.sellerPayout || 0), 0);
+  const commission = mine.reduce((s, o) => s + (o.commission || 0), 0);
+  const sellers = new Set(adminProducts.map(p => p.seller)).size;
+  const recent = mine.slice(0, 5);
+  const prodCount = isSeller
+    ? adminProducts.filter(p => p.seller === sellerName || p.seller === currentUser?.name).length
+    : adminProducts.length;
+  el.innerHTML = `
+    <h2>Dasbor ${isSeller ? 'Penjual' : 'Admin'}</h2>
+    <div class="admin-stats">
+      <div class="stat-card"><div class="stat-label">${isSeller?'GMV':'Revenue'}</div><div class="stat-val">${formatMoney(revenue)}</div></div>
+      <div class="stat-card"><div class="stat-label">${isSeller?'Payout':'Pesanan'}</div><div class="stat-val">${isSeller?formatMoney(payout):mine.length}</div></div>
+      <div class="stat-card"><div class="stat-label">${isSeller?'Komisi':'Produk'}</div><div class="stat-val">${isSeller?formatMoney(commission):prodCount}</div></div>
+      <div class="stat-card"><div class="stat-label">${isSeller?'Produk':'Sellers'}</div><div class="stat-val">${isSeller?prodCount:sellers}</div></div>
+    </div>
+    ${isSeller ? '<div class="content-card" style="margin-bottom:1rem"><button class="btn btn-primary btn-sm" onclick="submitKyc()">Ajukan KYC</button></div>' : ''}
+    <div class="admin-table-wrap"><div class="admin-table-head"><h3>Pesanan Terbaru</h3></div>
+    <table><thead><tr><th>ID</th><th>Total</th><th>Status</th></tr></thead><tbody>
+    ${recent.map(o => '<tr><td>'+o.id+'</td><td>'+formatMoney(o.total)+'</td><td>'+o.status+'</td></tr>').join('') || '<tr><td colspan=3>Kosong</td></tr>'}
+    </tbody></table></div>`;
+}
+async function submitKyc() {
+  if (!currentUser) return;
+  const note = prompt('Catatan KYC:', 'Dokumen toko lengkap') || '';
+  try {
+    if (!apiOnline) { toast('Butuh server online', 'error'); return; }
+    await apiRequest('POST', '/kyc/submit', { note, shopName: currentUser.shopName || currentUser.name });
+    toast('KYC dikirim', 'success');
+    renderAdmin('dashboard');
+  } catch (e) { toast(e.message || 'Gagal', 'error'); }
+}
+async function reviewKyc(userId, status) {
+  try {
+    await apiRequest('POST', '/kyc/review', { userId, status });
+    toast('KYC '+status, 'success');
+    renderAdmin('sellers-admin');
+  } catch (e) { toast(e.message || 'Gagal', 'error'); }
+}
+
 function renderAdmin(tab) {
   const el = document.getElementById('admin-main-content');
   if (!el) return;
@@ -1684,11 +1745,55 @@ function renderAdmin(tab) {
   const productsForAdmin = (isSeller && visibleProducts.length === 0) ? adminProducts : visibleProducts;
 
   if (tab === 'dashboard') {
+    // Load seller dashboard from API when possible
+    if (isSeller && apiOnline) {
+      el.innerHTML = `<p style="color:var(--text3)">Memuat dasbor penjual…</p>`;
+      apiRequest('GET', '/seller/dashboard').then(d => {
+        el.innerHTML = `
+          <h2>Dasbor Penjual — ${d.shopName || sellerName}
+            <span style="font-size:12px;margin-left:0.5rem;padding:0.15rem 0.5rem;border-radius:4px;background:${d.kycStatus==='verified'?'var(--success-bg)':d.kycStatus==='pending'?'var(--warn-bg)':'var(--surface2)'};color:${d.kycStatus==='verified'?'var(--success)':'var(--text2)'}">KYC: ${d.kycStatus || 'none'}</span>
+          </h2>
+          <div class="admin-stats">
+            <div class="stat-card"><div class="stat-label">GMV (subtotal)</div><div class="stat-val">${formatMoney(d.gmv||0)}</div><div class="stat-sub">${d.orderCount||0} pesanan</div></div>
+            <div class="stat-card"><div class="stat-label">Payout penjual</div><div class="stat-val">${formatMoney(d.sellerPayout||0)}</div><div class="stat-sub">Setelah komisi ${((d.commissionRate||0)*100).toFixed(0)}%</div></div>
+            <div class="stat-card"><div class="stat-label">Komisi platform</div><div class="stat-val">${formatMoney(d.commission||0)}</div><div class="stat-sub">Dipotong otomatis</div></div>
+            <div class="stat-card"><div class="stat-label">Produk</div><div class="stat-val">${d.productCount||0}</div><div class="stat-sub">Listing aktif</div></div>
+          </div>
+          ${d.kycStatus !== 'verified' ? `<div class="content-card" style="margin-bottom:1rem">
+            <h3>Verifikasi KYC</h3>
+            <p style="font-size:13px;color:var(--text2);margin-bottom:0.75rem">Status: <strong>${d.kycStatus||'none'}</strong>. Toko terverifikasi lebih dipercaya pembeli.</p>
+            <button class="btn btn-primary btn-sm" onclick="submitKyc()">Ajukan / Ulangi KYC</button>
+          </div>` : ''}
+          <div class="admin-table-wrap">
+            <div class="admin-table-head"><h3>Pesanan terkait toko</h3></div>
+            <table>
+              <thead><tr><th>ID</th><th>Total</th><th>Payout</th><th>Komisi</th><th>Status</th></tr></thead>
+              <tbody>
+                ${(d.recentOrders||[]).map(o => `
+                  <tr>
+                    <td class="table-name">${o.id}</td>
+                    <td>${formatMoney(o.total)}</td>
+                    <td>${formatMoney(o.sellerPayout||0)}</td>
+                    <td>${formatMoney(o.commission||0)}</td>
+                    <td>${o.status}</td>
+                  </tr>`).join('') || '<tr><td colspan="5" style="text-align:center;color:var(--text3)">Belum ada pesanan</td></tr>'}
+              </tbody>
+            </table>
+          </div>`;
+      }).catch(() => { /* fall through local */ renderAdminLocalDashboard(el, isSeller, sellerName); });
+      return;
+    }
+    renderAdminLocalDashboard(el, isSeller, sellerName);
+    return;
+  }
+  // continue other tabs below — inject helper before other tabs by falling through incorrectly
+  // FIX: the original code continued with else if — restore structure
+  if (false) {
     const revenue = ordersList.reduce((s, o) => s + (o.total || 0), 0);
     const sellers = new Set(adminProducts.map(p => p.seller)).size;
     const recent = ordersList.slice(0, 5);
     el.innerHTML = `
-      <h2>Dasbor ${apiOnline ? '<span style="font-size:12px;color:var(--success);font-weight:500">● API Online</span>' : '<span style="font-size:12px;color:var(--text3);font-weight:500">○ Offline mode</span>'}</h2>
+      <h2>Dasbor</h2>
       <div class="admin-stats">
         <div class="stat-card"><div class="stat-label">Total Revenue</div><div class="stat-val">${formatMoney(revenue)}</div><div class="stat-sub">Dari ${ordersList.length} pesanan</div></div>
         <div class="stat-card"><div class="stat-label">Pesanan</div><div class="stat-val">${ordersList.length}</div><div class="stat-sub">Semua status</div></div>
@@ -2154,11 +2259,12 @@ function renderWatchlist() {
 function productCardHTML(p, showRemove) {
   const inWl = isInWatchlist(p.id);
   const out = !p.stock;
+  const inCmp = compareList.includes(p.id);
   return `
     <div class="product-card" onclick="showDetail(${p.id})" style="${out ? 'opacity:0.72' : ''}">
       <div class="product-img" style="position:relative;overflow:hidden">
         ${p.badge ? `<span class="product-badge ${p.badge === 'Baru' || p.badge === 'Original' ? 'green' : ''}">${p.badge}</span>` : ''}
-        ${out ? `<span class="product-badge" style="left:auto;right:0.5rem;top:2.5rem;background:var(--danger)">Habis</span>` : ''}
+        ${out ? `<span class="product-badge" style="left:auto;right:0.5rem;top:2.5rem;background:var(--danger)">${t('product.soldOut')}</span>` : ''}
         <button class="wl-heart ${inWl ? 'active' : ''}" onclick="toggleWatchlist(${p.id}, event)" title="Watchlist">${inWl ? '❤️' : '🤍'}</button>
         ${productImageHTML(p)}
       </div>
@@ -2171,7 +2277,11 @@ function productCardHTML(p, showRemove) {
             <span class="product-price">${formatMoney(p.price)}</span>
             ${p.oldPrice ? `<span class="product-price-old">${formatMoney(p.oldPrice)}</span>` : ''}
           </div>
-          <button class="add-cart-btn" onclick="event.stopPropagation();addToCart(${p.id})" ${out ? 'disabled style="opacity:0.5;cursor:not-allowed"' : ''}>${out ? 'Habis' : '+ Keranjang'}</button>
+          <button class="add-cart-btn" onclick="event.stopPropagation();addToCart(${p.id})" ${out ? 'disabled style="opacity:0.5;cursor:not-allowed"' : ''}>${out ? t('product.soldOut') : t('product.addCart')}</button>
+        </div>
+        <div class="product-actions-row">
+          <button class="icon-btn ${inCmp ? 'active' : ''}" onclick="event.stopPropagation();toggleCompare(${p.id})" title="${t('compare.add')}">⚖️</button>
+          <button class="icon-btn" onclick="event.stopPropagation();shareProduct(${p.id})" title="${t('share.title')}">🔗</button>
         </div>
       </div>
     </div>`;
@@ -2322,29 +2432,33 @@ function renderSettings() {
   if (!el) return;
   const s = userSettings;
   el.innerHTML = `
-    <h1>Pengaturan</h1>
-    <p class="page-sub">Preferensi akun dan notifikasi</p>
+    <h1>${t('settings.title')}</h1>
+    <p class="page-sub">${t('settings.sub')}</p>
     <div class="content-card">
-      <h3>Notifikasi</h3>
+      <h3>${t('settings.notif')}</h3>
       <div class="setting-row">
-        <div><div class="setting-label">Email notifikasi</div><div class="setting-desc">Terima update via email</div></div>
+        <div><div class="setting-label">${t('settings.emailNotif')}</div><div class="setting-desc">${t('settings.emailNotifDesc')}</div></div>
         <button class="toggle ${s.emailNotif ? 'on' : ''}" onclick="toggleSetting('emailNotif', this)"></button>
       </div>
       <div class="setting-row">
-        <div><div class="setting-label">Update pesanan</div><div class="setting-desc">Status pengiriman & konfirmasi</div></div>
+        <div><div class="setting-label">${t('settings.orderNotif')}</div><div class="setting-desc">${t('settings.orderNotifDesc')}</div></div>
         <button class="toggle ${s.orderNotif ? 'on' : ''}" onclick="toggleSetting('orderNotif', this)"></button>
       </div>
       <div class="setting-row">
-        <div><div class="setting-label">Promo & deals</div><div class="setting-desc">Penawaran khusus dan diskon</div></div>
+        <div><div class="setting-label">${t('settings.promoNotif')}</div><div class="setting-desc">${t('settings.promoNotifDesc')}</div></div>
         <button class="toggle ${s.promoNotif ? 'on' : ''}" onclick="toggleSetting('promoNotif', this)"></button>
       </div>
     </div>
     <div class="content-card">
-      <h3>Tampilan</h3>
+      <h3>${t('settings.display')}</h3>
       <div class="setting-row">
-        <div><div class="setting-label">Bahasa</div><div class="setting-desc">Bahasa antarmuka</div></div>
+        <div><div class="setting-label">${t('settings.darkMode')}</div><div class="setting-desc">${t('settings.darkModeDesc')}</div></div>
+        <button class="toggle ${s.darkMode ? 'on' : ''}" onclick="toggleSetting('darkMode', this); applyTheme()"></button>
+      </div>
+      <div class="setting-row">
+        <div><div class="setting-label">${t('settings.language')}</div><div class="setting-desc">${t('settings.languageDesc')}</div></div>
         <select id="set-lang" onchange="changeLanguage(this.value)"
-          style="border:1px solid var(--border);border-radius:var(--r);padding:0.35rem 0.6rem;font-size:13px">
+          style="border:1px solid var(--border);border-radius:var(--r);padding:0.35rem 0.6rem;font-size:13px;background:var(--surface);color:var(--text)">
           <option value="id" ${s.language==='id'?'selected':''}>Bahasa Indonesia (Rp)</option>
           <option value="en" ${s.language==='en'?'selected':''}>English ($)</option>
         </select>
@@ -2382,14 +2496,21 @@ function toggleSetting(key, btn) {
 function changeLanguage(lang) {
   userSettings.language = lang;
   localStorage.setItem('ysi-settings', JSON.stringify(userSettings));
+  document.documentElement.lang = lang;
+  applyI18n();
   const c = getCurrency();
-  toast(`Bahasa & mata uang: ${c.code}`, 'success');
+  toast(`${t('settings.language')}: ${c.code}`, 'success');
   updatePriceFilterPlaceholders();
-  // refresh visible page so prices update
   const active = document.querySelector('.page.active');
   const name = active?.id?.replace('page-', '');
   if (name) showPage(name);
   else renderProducts();
+}
+
+function applyTheme() {
+  const dark = !!userSettings.darkMode;
+  document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+  localStorage.setItem('ysi-settings', JSON.stringify(userSettings));
 }
 
 function updatePriceFilterPlaceholders() {
@@ -2554,16 +2675,263 @@ function capitalize(str) {
 }
 
 // ============================================================
+//  i18n
+// ============================================================
+const I18N = {
+  id: {
+    'product.addCart': '+ Keranjang',
+    'product.soldOut': 'Habis',
+    'compare.title': 'Bandingkan',
+    'compare.open': 'Buka',
+    'compare.clear': 'Hapus',
+    'compare.add': 'Bandingkan',
+    'compare.full': 'Maksimal 4 produk',
+    'share.title': 'Bagikan',
+    'share.copied': 'Link disalin',
+    'settings.title': 'Pengaturan',
+    'settings.sub': 'Preferensi akun dan notifikasi',
+    'settings.notif': 'Notifikasi',
+    'settings.emailNotif': 'Email notifikasi',
+    'settings.emailNotifDesc': 'Terima update via email',
+    'settings.orderNotif': 'Update pesanan',
+    'settings.orderNotifDesc': 'Status pengiriman & konfirmasi',
+    'settings.promoNotif': 'Promo & deals',
+    'settings.promoNotifDesc': 'Penawaran khusus dan diskon',
+    'settings.display': 'Tampilan',
+    'settings.darkMode': 'Mode gelap',
+    'settings.darkModeDesc': 'Tema gelap untuk kenyamanan malam',
+    'settings.language': 'Bahasa',
+    'settings.languageDesc': 'Bahasa antarmuka & mata uang',
+    'footer.tag': 'Marketplace terbuka untuk semua.',
+    'footer.legal': 'Legal',
+    'footer.terms': 'Syarat & Ketentuan',
+    'footer.privacy': 'Kebijakan Privasi',
+    'footer.contact': 'Kontak',
+    'footer.help': 'Bantuan',
+    'footer.helpCenter': 'Pusat Bantuan',
+    'footer.deals': 'Promo',
+    'footer.account': 'Akun',
+    'footer.login': 'Masuk',
+    'footer.sell': 'Jadi Penjual',
+    'footer.rights': 'Hak cipta dilindungi',
+    'legal.termsTitle': 'Syarat & Ketentuan',
+    'legal.privacyTitle': 'Kebijakan Privasi',
+    'legal.contactTitle': 'Hubungi Kami',
+  },
+  en: {
+    'product.addCart': '+ Cart',
+    'product.soldOut': 'Sold out',
+    'compare.title': 'Compare',
+    'compare.open': 'Open',
+    'compare.clear': 'Clear',
+    'compare.add': 'Compare',
+    'compare.full': 'Max 4 products',
+    'share.title': 'Share',
+    'share.copied': 'Link copied',
+    'settings.title': 'Settings',
+    'settings.sub': 'Account and notification preferences',
+    'settings.notif': 'Notifications',
+    'settings.emailNotif': 'Email notifications',
+    'settings.emailNotifDesc': 'Receive updates by email',
+    'settings.orderNotif': 'Order updates',
+    'settings.orderNotifDesc': 'Shipping status & confirmation',
+    'settings.promoNotif': 'Promos & deals',
+    'settings.promoNotifDesc': 'Special offers and discounts',
+    'settings.display': 'Display',
+    'settings.darkMode': 'Dark mode',
+    'settings.darkModeDesc': 'Dark theme for night comfort',
+    'settings.language': 'Language',
+    'settings.languageDesc': 'Interface language & currency',
+    'footer.tag': 'Open marketplace for everyone.',
+    'footer.legal': 'Legal',
+    'footer.terms': 'Terms of Service',
+    'footer.privacy': 'Privacy Policy',
+    'footer.contact': 'Contact',
+    'footer.help': 'Help',
+    'footer.helpCenter': 'Help Center',
+    'footer.deals': 'Deals',
+    'footer.account': 'Account',
+    'footer.login': 'Sign in',
+    'footer.sell': 'Sell on YourShop',
+    'footer.rights': 'All rights reserved',
+    'legal.termsTitle': 'Terms of Service',
+    'legal.privacyTitle': 'Privacy Policy',
+    'legal.contactTitle': 'Contact Us',
+  },
+};
+
+function t(key) {
+  const lang = userSettings?.language || 'id';
+  return (I18N[lang] && I18N[lang][key]) || (I18N.id[key]) || key;
+}
+
+function applyI18n() {
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    const key = el.getAttribute('data-i18n');
+    if (key) el.textContent = t(key);
+  });
+}
+
+// ============================================================
+//  COMPARE + SHARE
+// ============================================================
+let compareList = JSON.parse(localStorage.getItem('ysi-compare') || '[]');
+
+function toggleCompare(id) {
+  id = Number(id);
+  const i = compareList.indexOf(id);
+  if (i >= 0) compareList.splice(i, 1);
+  else {
+    if (compareList.length >= 4) { toast(t('compare.full'), 'error'); return; }
+    compareList.push(id);
+  }
+  localStorage.setItem('ysi-compare', JSON.stringify(compareList));
+  renderCompareBar();
+  renderProducts?.();
+  renderFeatured?.();
+}
+
+function clearCompare() {
+  compareList = [];
+  localStorage.setItem('ysi-compare', '[]');
+  renderCompareBar();
+  renderProducts?.();
+}
+
+function renderCompareBar() {
+  const bar = document.getElementById('compare-bar');
+  const slots = document.getElementById('compare-slots');
+  if (!bar || !slots) return;
+  if (!compareList.length) { bar.style.display = 'none'; return; }
+  bar.style.display = 'block';
+  slots.innerHTML = compareList.map(id => {
+    const p = adminProducts.find(x => x.id === id);
+    if (!p) return '';
+    return `<span class="compare-chip">${p.emoji || '📦'} ${p.name.slice(0, 22)}
+      <button onclick="toggleCompare(${id})" title="×">×</button></span>`;
+  }).join('');
+}
+
+function openCompare() {
+  if (compareList.length < 2) { toast('Pilih minimal 2 produk', 'error'); return; }
+  const items = compareList.map(id => adminProducts.find(x => x.id === id)).filter(Boolean);
+  const modal = document.getElementById('modal-content');
+  if (!modal) return;
+  const cols = items.map(p => `
+    <div style="flex:1;min-width:140px;border:1px solid var(--border);border-radius:var(--r);padding:0.75rem;background:var(--surface2)">
+      <div style="font-size:2rem;text-align:center">${p.emoji || '📦'}</div>
+      <div style="font-weight:600;font-size:13px;margin:0.4rem 0">${p.name}</div>
+      <div style="color:var(--accent);font-weight:700">${formatMoney(p.price)}</div>
+      <div style="font-size:12px;color:var(--text2);margin-top:0.35rem">⭐ ${p.rating} · ${p.seller}</div>
+      <div style="font-size:12px;margin-top:0.25rem">${p.category || ''}</div>
+      <div style="font-size:12px">${p.stock ? t('product.addCart') : t('product.soldOut')}</div>
+      <button class="btn btn-primary btn-sm" style="width:100%;margin-top:0.5rem" onclick="closeModal();showDetail(${p.id})">Detail</button>
+    </div>`).join('');
+  modal.innerHTML = `<h2>${t('compare.title')}</h2>
+    <div style="display:flex;gap:0.75rem;overflow-x:auto;margin-top:1rem">${cols}</div>`;
+  document.getElementById('track-modal').classList.add('open');
+}
+
+function shareProduct(id) {
+  const p = adminProducts.find(x => x.id === Number(id));
+  if (!p) return;
+  const url = `${location.origin}${location.pathname}?product=${p.id}`;
+  const text = `${p.name} — ${formatMoney(p.price)} | YourShop.Id`;
+  if (navigator.share) {
+    navigator.share({ title: p.name, text, url }).catch(() => {});
+  } else if (navigator.clipboard) {
+    navigator.clipboard.writeText(url).then(() => toast(t('share.copied'), 'success'));
+  } else {
+    prompt('Copy link:', url);
+  }
+}
+
+// ============================================================
+//  LEGAL PAGES
+// ============================================================
+function renderTerms() {
+  const el = document.getElementById('terms-content');
+  if (!el) return;
+  el.innerHTML = `<h1>${t('legal.termsTitle')}</h1>
+    <div class="content-card" style="line-height:1.7;font-size:14px;color:var(--text2)">
+      <p><strong>1. Penerimaan.</strong> Dengan menggunakan YourShop.Id Anda menyetujui syarat ini.</p>
+      <p><strong>2. Akun.</strong> Anda bertanggung jawab menjaga kerahasiaan kredensial.</p>
+      <p><strong>3. Transaksi.</strong> Pesanan mengikat setelah pembayaran dikonfirmasi. Komisi platform dapat dipotong dari penjual.</p>
+      <p><strong>4. Konten.</strong> Dilarang menjual barang ilegal atau melanggar hak pihak ketiga.</p>
+      <p><strong>5. Penalti.</strong> Pelanggaran dapat berujung suspensi akun atau toko.</p>
+      <p style="margin-top:1rem;font-size:12px;color:var(--text3)">Terakhir diperbarui: Agustus 2026</p>
+    </div>`;
+}
+function renderPrivacy() {
+  const el = document.getElementById('privacy-content');
+  if (!el) return;
+  el.innerHTML = `<h1>${t('legal.privacyTitle')}</h1>
+    <div class="content-card" style="line-height:1.7;font-size:14px;color:var(--text2)">
+      <p><strong>Data yang dikumpulkan:</strong> email, nama, alamat pengiriman, riwayat pesanan, dan log teknis.</p>
+      <p><strong>Penggunaan:</strong> memproses pesanan, keamanan, dan peningkatan layanan. Tidak dijual ke pihak ketiga.</p>
+      <p><strong>Penyimpanan:</strong> data disimpan di server Anda / penyedia hosting dengan kontrol akses.</p>
+      <p><strong>Hak Anda:</strong> minta akses, koreksi, atau penghapusan data melalui halaman Kontak.</p>
+      <p style="margin-top:1rem;font-size:12px;color:var(--text3)">Terakhir diperbarui: Agustus 2026</p>
+    </div>`;
+}
+function renderContact() {
+  const el = document.getElementById('contact-content');
+  if (!el) return;
+  el.innerHTML = `<h1>${t('legal.contactTitle')}</h1>
+    <div class="content-card">
+      <p style="margin-bottom:1rem;color:var(--text2)">Email: <a href="mailto:support@yourshop.id">support@yourshop.id</a><br>
+      WhatsApp: +62 800-0000-0000<br>Jam kerja: Senin–Jumat 09.00–18.00 WIB</p>
+      <div class="form-group"><label>Nama</label><input id="contact-name" type="text"></div>
+      <div class="form-group"><label>Email</label><input id="contact-email" type="email"></div>
+      <div class="form-group"><label>Pesan</label><textarea id="contact-msg" rows="4" style="width:100%;border:1px solid var(--border);border-radius:var(--r);padding:0.5rem;background:var(--bg);color:var(--text)"></textarea></div>
+      <button class="btn btn-primary" onclick="toast('Pesan tercatat (demo)', 'success')">Kirim</button>
+    </div>`;
+}
+
+function wireAssets() {
+  if (typeof YourShopAssets === 'undefined') return;
+  try {
+    // Favicon
+    if (YourShopAssets.FAVICON_SVG) {
+      let link = document.querySelector("link[rel='icon']");
+      if (!link) { link = document.createElement('link'); link.rel = 'icon'; document.head.appendChild(link); }
+      link.href = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(YourShopAssets.FAVICON_SVG);
+    }
+    // Logo in nav if empty
+    const navLogo = document.querySelector('.nav-logo, .logo-text, #footer-logo');
+    if (navLogo && YourShopAssets.LOGO_SVG && !navLogo.querySelector('img')) {
+      // keep text brand; optional mark
+    }
+    // Expose placeholders for product images without imageUrl
+    window.ysiPlaceholder = (cat) => {
+      const map = YourShopAssets.CATEGORY_PLACEHOLDERS || {};
+      return map[cat] || map.default || '';
+    };
+  } catch (e) { console.warn('assets wire', e); }
+}
+
+// ============================================================
 //  INIT
 // ============================================================
 
 document.addEventListener('DOMContentLoaded', async () => {
+  applyTheme();
+  applyI18n();
+  wireAssets();
+  renderCompareBar();
   updateCartCount();
   updateUserUI();
   updateNotifBadge();
   updatePriceFilterPlaceholders();
   await loadInitialData();
   await validateSession();
+
+  // Deep link ?product=id
+  const params = new URLSearchParams(location.search);
+  if (params.get('product')) {
+    const id = Number(params.get('product'));
+    if (id) setTimeout(() => showDetail(id), 300);
+  }
 
   document.getElementById('track-modal')?.addEventListener('click', function (e) {
     if (e.target === this) closeModal();

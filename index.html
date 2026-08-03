@@ -33,7 +33,31 @@
     --shadow: 0 1px 4px rgba(0,0,0,0.08);
     --shadow2: 0 4px 16px rgba(0,0,0,0.12);
   }
-  body { font-family: var(--font-body); background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.5; min-height: 100vh; }
+  [data-theme="dark"] {
+    --bg: #121212;
+    --surface: #1E1E1E;
+    --surface2: #2A2A2A;
+    --border: #333333;
+    --border2: #4A4A4A;
+    --text: #F0F0F0;
+    --text2: #B0B0B0;
+    --text3: #808080;
+    --accent: #3B8DEB;
+    --accent2: #5BA0F0;
+    --accent-light: #1A2A3A;
+    --success: #3DDB8A;
+    --success-bg: #0F2A1C;
+    --warn: #E6B84D;
+    --warn-bg: #2A2208;
+    --danger: #F07178;
+    --danger-bg: #2A1214;
+    --shadow: 0 1px 4px rgba(0,0,0,0.4);
+    --shadow2: 0 4px 16px rgba(0,0,0,0.5);
+  }
+  [data-theme="dark"] .top-bar { background: #1A1A1A; }
+  [data-theme="dark"] .nav-main { background: var(--surface); }
+  [data-theme="dark"] .category-bar { background: var(--surface); }
+  body { font-family: var(--font-body); background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.5; min-height: 100vh; transition: background 0.2s, color 0.2s; }
 
   /* ── TOP UTILITY BAR (eBay-style) ── */
   .top-bar {
@@ -751,6 +775,50 @@
 
   .no-results { text-align: center; padding: 4rem 2rem; color: var(--text2); grid-column: 1/-1; }
 
+
+  /* Footer */
+  .site-footer {
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    margin-top: 3rem;
+    padding: 2.5rem 1.5rem 1.5rem;
+  }
+  .footer-grid {
+    max-width: 1200px; margin: 0 auto;
+    display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 2rem;
+  }
+  .footer-brand { font-family: var(--font-head); font-weight: 800; font-size: 1.15rem; color: var(--accent); margin-bottom: 0.4rem; }
+  .footer-tag { font-size: 13px; color: var(--text2); max-width: 240px; }
+  .site-footer h4 { font-size: 13px; font-weight: 600; margin-bottom: 0.6rem; color: var(--text); }
+  .site-footer a { display: block; font-size: 13px; color: var(--text2); text-decoration: none; margin-bottom: 0.35rem; }
+  .site-footer a:hover { color: var(--accent); }
+  .footer-bottom { max-width: 1200px; margin: 1.5rem auto 0; padding-top: 1rem; border-top: 1px solid var(--border); font-size: 12px; color: var(--text3); }
+  @media (max-width: 700px) {
+    .footer-grid { grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+  }
+  /* Compare bar */
+  .compare-bar {
+    position: fixed; bottom: 0; left: 0; right: 0; z-index: 90;
+    background: var(--surface); border-top: 1px solid var(--border);
+    box-shadow: var(--shadow2); padding: 0.6rem 1rem;
+  }
+  .compare-inner { max-width: 1100px; margin: 0 auto; display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
+  .compare-slots { display: flex; gap: 0.5rem; flex: 1; flex-wrap: wrap; }
+  .compare-chip {
+    display: flex; align-items: center; gap: 0.35rem;
+    background: var(--surface2); border: 1px solid var(--border); border-radius: 100px;
+    padding: 0.25rem 0.6rem; font-size: 12px;
+  }
+  .compare-chip button { border: none; background: none; cursor: pointer; color: var(--text3); font-size: 14px; }
+  .product-actions-row { display: flex; gap: 0.35rem; margin-top: 0.4rem; }
+  .icon-btn {
+    background: var(--surface2); border: 1px solid var(--border); border-radius: var(--r);
+    width: 32px; height: 32px; cursor: pointer; font-size: 14px; display: inline-flex;
+    align-items: center; justify-content: center; color: var(--text2);
+  }
+  .icon-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .icon-btn.active { background: var(--accent-light); border-color: var(--accent); color: var(--accent); }
+
 </style>
 </head>
 <body>
@@ -1065,6 +1133,27 @@
   <div class="content-page" id="notifications-content"></div>
 </div>
 
+<!-- LEGAL PAGES -->
+<div class="page" id="page-terms">
+  <div class="content-page" style="max-width:720px" id="terms-content"></div>
+</div>
+<div class="page" id="page-privacy">
+  <div class="content-page" style="max-width:720px" id="privacy-content"></div>
+</div>
+<div class="page" id="page-contact">
+  <div class="content-page" style="max-width:640px" id="contact-content"></div>
+</div>
+
+<!-- COMPARE BAR -->
+<div id="compare-bar" class="compare-bar" style="display:none">
+  <div class="compare-inner">
+    <span id="compare-label" data-i18n="compare.title">Bandingkan</span>
+    <div id="compare-slots" class="compare-slots"></div>
+    <button class="btn btn-primary btn-sm" onclick="openCompare()" data-i18n="compare.open">Buka</button>
+    <button class="btn btn-ghost btn-sm" onclick="clearCompare()" data-i18n="compare.clear">Hapus</button>
+  </div>
+</div>
+
 <!-- TRACKING MODAL -->
 <div class="modal-bg" id="track-modal">
   <div class="modal">
@@ -1074,6 +1163,32 @@
 </div>
 
 <div class="toast-wrap" id="toasts"></div>
+
+<footer class="site-footer">
+  <div class="footer-grid">
+    <div>
+      <div class="footer-brand" id="footer-logo">YourShop.Id</div>
+      <p class="footer-tag" data-i18n="footer.tag">Marketplace terbuka untuk semua.</p>
+    </div>
+    <div>
+      <h4 data-i18n="footer.legal">Legal</h4>
+      <a href="#" onclick="showPage('terms');return false" data-i18n="footer.terms">Syarat & Ketentuan</a>
+      <a href="#" onclick="showPage('privacy');return false" data-i18n="footer.privacy">Kebijakan Privasi</a>
+      <a href="#" onclick="showPage('contact');return false" data-i18n="footer.contact">Kontak</a>
+    </div>
+    <div>
+      <h4 data-i18n="footer.help">Bantuan</h4>
+      <a href="#" onclick="showPage('help');return false" data-i18n="footer.helpCenter">Pusat Bantuan</a>
+      <a href="#" onclick="showPage('deals');return false" data-i18n="footer.deals">Promo</a>
+    </div>
+    <div>
+      <h4 data-i18n="footer.account">Akun</h4>
+      <a href="#" onclick="showPage('login');return false" data-i18n="footer.login">Masuk</a>
+      <a href="#" onclick="showPage('become-seller');return false" data-i18n="footer.sell">Jadi Penjual</a>
+    </div>
+  </div>
+  <div class="footer-bottom">© 2026 YourShop.Id · <span data-i18n="footer.rights">Hak cipta dilindungi</span></div>
+</footer>
 
 <script src="config.js"></script>
 <script src="assets.js"></script>

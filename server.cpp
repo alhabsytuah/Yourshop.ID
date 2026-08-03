@@ -28,18 +28,37 @@
 #include <ctime>
 #include <fstream>
 #include <cctype>
+#include <cstring>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <netdb.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <errno.h>
+
+// OpenSSL — JWT HS256 + PBKDF2 password hashing
+#include <openssl/evp.h>
+#include <openssl/hmac.h>
+#include <openssl/rand.h>
+#include <openssl/sha.h>
+
+// Enable TLS support in cpp-httplib when linking -lssl -lcrypto
+#define CPPHTTPLIB_OPENSSL_SUPPORT
 
 // Single-header libraries — place in same directory or install system-wide
 // https://github.com/yhirose/cpp-httplib   → httplib.h
 // https://github.com/nlohmann/json         → json.hpp
 #include "httplib.h"
 #include "json.hpp"
+#include "sqlite3.h"
 
 using json = nlohmann::json;
 
 // Forward decls — dipakai DataStore::seed()
-static std::string hashPassword(const std::string& password, const std::string& salt);
-static std::string makeSalt();
+static std::string hashPassword(const std::string& password, const std::string& saltHex = "");
+static std::string makeSalt(size_t bytes);
+std::string currentTimestamp();
 
 // ============================================================
 //  DATA MODELS
@@ -128,6 +147,11 @@ struct Order {
     std::string cancelReason;
     std::string returnStatus;    // none | requested | approved | rejected | refunded
     std::string returnReason;
+    // Komisi platform
+    double      subtotal = 0;
+    double      commissionRate = 0;  // e.g. 0.05 = 5%
+    double      commission = 0;
+    double      sellerPayout = 0;
 
     json toJson() const {
         json j;
@@ -149,6 +173,10 @@ struct Order {
         j["cancelReason"]   = cancelReason;
         j["returnStatus"]   = returnStatus.empty() ? "none" : returnStatus;
         j["returnReason"]   = returnReason;
+        j["subtotal"]       = subtotal;
+        j["commissionRate"] = commissionRate;
+        j["commission"]     = commission;
+        j["sellerPayout"]   = sellerPayout;
 
         json itemsArr = json::array();
         for (const auto& item : items) {
@@ -181,25 +209,49 @@ struct User {
     std::string id;
     std::string name;
     std::string email;
-    std::string passwordHash; // simpan hash bcrypt di produksi
+    std::string passwordHash;
     std::string role;         // "buyer" | "seller" | "admin"
-    std::string shopName;     // khusus penjual
+    std::string shopName;
     std::string phone;
     std::string address;
     std::string createdAt;
+    // KYC / verifikasi toko
+    std::string kycStatus;    // none | pending | verified | rejected
+    std::string kycNote;
+    std::string kycUpdatedAt;
 
     json toJson() const {
         json j;
-        j["id"]        = id;
-        j["name"]      = name;
-        j["email"]     = email;
-        j["role"]      = role;
-        j["shopName"]  = shopName;
-        j["phone"]     = phone;
-        j["address"]   = address;
-        j["createdAt"] = createdAt;
-        // jangan pernah kembalikan passwordHash ke klien
+        j["id"]           = id;
+        j["name"]         = name;
+        j["email"]        = email;
+        j["role"]         = role;
+        j["shopName"]     = shopName;
+        j["phone"]        = phone;
+        j["address"]      = address;
+        j["createdAt"]    = createdAt;
+        j["kycStatus"]    = kycStatus.empty() ? "none" : kycStatus;
+        j["kycNote"]      = kycNote;
+        j["kycUpdatedAt"] = kycUpdatedAt;
         return j;
+    }
+};
+
+struct Notification {
+    int         id = 0;
+    std::string userId;     // empty = broadcast
+    std::string title;
+    std::string body;
+    std::string type;       // order | system | promo | kyc
+    std::string createdAt;
+    bool        read = false;
+
+    json toJson() const {
+        return {
+            {"id", id}, {"userId", userId}, {"title", title},
+            {"body", body}, {"type", type}, {"createdAt", createdAt},
+            {"read", read},
+        };
     }
 };
 
@@ -214,28 +266,62 @@ public:
     std::vector<Product> products;
     std::vector<Order>   orders;
     std::vector<User>    users;
+    std::vector<Notification> notifications;
     std::vector<std::string> suspendedSellers;
     int                  nextProductId = 100;
     int                  nextOrderSeq  = 9000;
     int                  nextUserSeq   = 10;
     int                  nextInvoiceSeq = 1000;
+    int                  nextNotifId   = 1;
+    int                  schemaVersion = 2;
+    double               commissionRate = 0.05; // 5% default platform fee
     std::mutex           mu;
     std::string          dataFile = "ysi_data.json";
+    std::string          sqliteFile = "ysi_data.db";
+    bool                 useSqlite = false;
 
     DataStore() {
-        if (!loadFromDisk()) seed();
+        const char* db = std::getenv("YSI_DB");
+        if (db && (std::string(db) == "sqlite" || std::string(db) == "sqlite3"))
+            useSqlite = true;
+        if (const char* r = std::getenv("YSI_COMMISSION_RATE")) {
+            double v = std::atof(r);
+            if (v >= 0 && v <= 0.5) commissionRate = v;
+        }
+        bool loaded = useSqlite ? loadFromSqlite() : loadFromDisk();
+        if (!loaded) seed();
+        if (useSqlite) saveToSqlite();
+        else saveToDisk();
     }
 
     bool isSellerSuspended(const std::string& name) const {
         return std::find(suspendedSellers.begin(), suspendedSellers.end(), name) != suspendedSellers.end();
     }
 
+    void pushNotif(const std::string& userId, const std::string& title,
+                   const std::string& body, const std::string& type = "system") {
+        Notification n;
+        n.id = nextNotifId++;
+        n.userId = userId;
+        n.title = title;
+        n.body = body;
+        n.type = type;
+        n.createdAt = currentTimestamp();
+        n.read = false;
+        notifications.insert(notifications.begin(), n);
+        if (notifications.size() > 500) notifications.resize(500);
+    }
+
     void saveToDisk() {
         try {
             json root;
+            root["schemaVersion"] = schemaVersion;
             root["nextProductId"] = nextProductId;
             root["nextOrderSeq"]  = nextOrderSeq;
             root["nextUserSeq"]   = nextUserSeq;
+            root["nextInvoiceSeq"] = nextInvoiceSeq;
+            root["nextNotifId"]   = nextNotifId;
+            root["commissionRate"] = commissionRate;
             root["suspendedSellers"] = suspendedSellers;
 
             json prods = json::array();
@@ -249,13 +335,19 @@ public:
             json us = json::array();
             for (const auto& u : users) {
                 auto j = u.toJson();
-                j["passwordHash"] = u.passwordHash; // simpan internal saja di file
+                j["passwordHash"] = u.passwordHash;
                 us.push_back(j);
             }
             root["users"] = us;
 
+            json ns = json::array();
+            for (const auto& n : notifications) ns.push_back(n.toJson());
+            root["notifications"] = ns;
+
             std::ofstream ofs(dataFile);
             if (ofs) ofs << root.dump(2);
+
+            if (useSqlite) saveToSqlite();
         } catch (...) {
             std::cerr << "[warn] gagal menyimpan " << dataFile << std::endl;
         }
@@ -344,15 +436,56 @@ private:
                     u.phone        = j.value("phone", "");
                     u.address      = j.value("address", "");
                     u.createdAt    = j.value("createdAt", "");
+                    u.kycStatus    = j.value("kycStatus", "none");
+                    u.kycNote      = j.value("kycNote", "");
+                    u.kycUpdatedAt = j.value("kycUpdatedAt", "");
                     users.push_back(u);
                 }
             }
-            std::cout << "[YourShop] Data dimuat dari " << dataFile << std::endl;
+            notifications.clear();
+            if (root.contains("notifications")) {
+                for (const auto& j : root["notifications"]) {
+                    Notification n;
+                    n.id = j.value("id", 0);
+                    n.userId = j.value("userId", "");
+                    n.title = j.value("title", "");
+                    n.body = j.value("body", "");
+                    n.type = j.value("type", "system");
+                    n.createdAt = j.value("createdAt", "");
+                    n.read = j.value("read", false);
+                    notifications.push_back(n);
+                }
+            }
+            nextInvoiceSeq = root.value("nextInvoiceSeq", nextInvoiceSeq);
+            nextNotifId = root.value("nextNotifId", nextNotifId);
+            schemaVersion = root.value("schemaVersion", 1);
+            commissionRate = root.value("commissionRate", commissionRate);
+            std::cout << "[YourShop] Data dimuat dari " << dataFile
+                      << " (schema v" << schemaVersion << ")" << std::endl;
             return !products.empty();
         } catch (...) {
             return false;
         }
     }
+
+    bool saveToSqlite() {
+        // Persist as JSON blob in SQLite for durable storage + easy backup
+        try {
+            // Implemented below after includes of sqlite3
+            return saveToSqliteImpl();
+        } catch (...) {
+            return false;
+        }
+    }
+    bool loadFromSqlite() {
+        try {
+            return loadFromSqliteImpl();
+        } catch (...) {
+            return false;
+        }
+    }
+    bool saveToSqliteImpl();
+    bool loadFromSqliteImpl();
 
     void seed() {
         // --- Produk (kategori & badge selaras dengan frontend ID) ---
@@ -374,13 +507,15 @@ private:
 
         // --- Users (password demo: "demo" — di-hash dengan salt) ---
         auto hp = [](const std::string& pw) {
-            return hashPassword(pw, makeSalt());
+            return hashPassword(pw, makeSalt(16));
         };
         users = {
-            {"u1", "Budi Santoso",   "buyer@demo.com",  hp("demo"), "buyer",  "",           "", "", "2026-01-10"},
-            {"u2", "Sari Kerajinan", "seller@demo.com", hp("demo"), "seller", "CraftWorks", "", "", "2026-01-15"},
-            {"u3", "Dian Admin",     "admin@demo.com",  hp("demo"), "admin",  "",           "", "", "2026-01-01"},
+            {"u1", "Budi Santoso",   "buyer@demo.com",  hp("demo"), "buyer",  "",           "", "", "2026-01-10", "none", "", ""},
+            {"u2", "Sari Kerajinan", "seller@demo.com", hp("demo"), "seller", "CraftWorks", "", "", "2026-01-15", "verified", "Demo toko terverifikasi", "2026-01-15"},
+            {"u3", "Dian Admin",     "admin@demo.com",  hp("demo"), "admin",  "",           "", "", "2026-01-01", "none", "", ""},
         };
+        pushNotif("u2", "Selamat datang, penjual!", "Toko CraftWorks sudah terverifikasi KYC.", "kyc");
+        pushNotif("u1", "Promo spesial", "Gunakan kode SAVE10 untuk diskon 10%.", "promo");
 
         // --- Pesanan ---
         orders = {
@@ -424,17 +559,159 @@ private:
     }
 };
 
+// --- SQLite persistence (JSON document in single row) ---
+bool DataStore::saveToSqliteImpl() {
+    sqlite3* db = nullptr;
+    if (sqlite3_open(sqliteFile.c_str(), &db) != SQLITE_OK) {
+        std::cerr << "[sqlite] open fail\n";
+        if (db) sqlite3_close(db);
+        return false;
+    }
+    char* err = nullptr;
+    sqlite3_exec(db,
+        "CREATE TABLE IF NOT EXISTS store ("
+        " id INTEGER PRIMARY KEY CHECK (id=1),"
+        " schema_version INTEGER,"
+        " payload TEXT NOT NULL,"
+        " updated_at TEXT);", nullptr, nullptr, &err);
+    if (err) { sqlite3_free(err); sqlite3_close(db); return false; }
+
+    json root;
+    root["schemaVersion"] = schemaVersion;
+    root["nextProductId"] = nextProductId;
+    root["nextOrderSeq"]  = nextOrderSeq;
+    root["nextUserSeq"]   = nextUserSeq;
+    root["nextInvoiceSeq"] = nextInvoiceSeq;
+    root["nextNotifId"]   = nextNotifId;
+    root["commissionRate"] = commissionRate;
+    root["suspendedSellers"] = suspendedSellers;
+    json prods = json::array();
+    for (const auto& p : products) prods.push_back(p.toJson());
+    root["products"] = prods;
+    json ords = json::array();
+    for (const auto& o : orders) ords.push_back(o.toJson());
+    root["orders"] = ords;
+    json us = json::array();
+    for (const auto& u : users) {
+        auto j = u.toJson();
+        j["passwordHash"] = u.passwordHash;
+        us.push_back(j);
+    }
+    root["users"] = us;
+    json ns = json::array();
+    for (const auto& n : notifications) ns.push_back(n.toJson());
+    root["notifications"] = ns;
+
+    std::string payload = root.dump();
+    sqlite3_exec(db, "BEGIN;", nullptr, nullptr, nullptr);
+    sqlite3_exec(db, "DELETE FROM store;", nullptr, nullptr, nullptr);
+    sqlite3_stmt* stmt = nullptr;
+    const char* sql = "INSERT INTO store(id, schema_version, payload, updated_at) VALUES (1,?,?,datetime('now'));";
+    if (sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+        sqlite3_close(db); return false;
+    }
+    sqlite3_bind_int(stmt, 1, schemaVersion);
+    sqlite3_bind_text(stmt, 2, payload.c_str(), (int)payload.size(), SQLITE_TRANSIENT);
+    bool ok = sqlite3_step(stmt) == SQLITE_DONE;
+    sqlite3_finalize(stmt);
+    sqlite3_exec(db, ok ? "COMMIT;" : "ROLLBACK;", nullptr, nullptr, nullptr);
+    sqlite3_close(db);
+    return ok;
+}
+
+bool DataStore::loadFromSqliteImpl() {
+    sqlite3* db = nullptr;
+    if (sqlite3_open(sqliteFile.c_str(), &db) != SQLITE_OK) {
+        if (db) sqlite3_close(db);
+        return false;
+    }
+    sqlite3_stmt* stmt = nullptr;
+    if (sqlite3_prepare_v2(db, "SELECT payload FROM store WHERE id=1;", -1, &stmt, nullptr) != SQLITE_OK) {
+        sqlite3_close(db); return false;
+    }
+    bool ok = false;
+    if (sqlite3_step(stmt) == SQLITE_ROW) {
+        const char* txt = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0));
+        if (txt) {
+            try {
+                json root = json::parse(txt);
+                std::ofstream ofs(dataFile);
+                if (ofs) ofs << root.dump(2);
+                ok = true;
+            } catch (...) { ok = false; }
+        }
+    }
+    sqlite3_finalize(stmt);
+    sqlite3_close(db);
+    if (ok) return loadFromDisk();
+    return false;
+}
+
 // ============================================================
 //  HELPERS
 // ============================================================
 
 static DataStore store;
 
-// Header CORS sederhana — perketat origin di produksi
-void setCorsHeaders(httplib::Response& res) {
-    res.set_header("Access-Control-Allow-Origin",  "*");
+// ============================================================
+//  CORS — allowlist (bukan *). Env: YSI_CORS_ORIGINS=comma-separated
+// ============================================================
+static std::vector<std::string> corsAllowedOrigins() {
+    static std::vector<std::string> origins;
+    static bool init = false;
+    if (!init) {
+        const char* env = std::getenv("YSI_CORS_ORIGINS");
+        std::string raw = env ? env :
+            "http://localhost:5500,http://127.0.0.1:5500,"
+            "http://localhost:8080,http://127.0.0.1:8080,"
+            "https://localhost:5500,https://127.0.0.1:5500,"
+            "https://localhost:8443,https://127.0.0.1:8443,"
+            "null"; // file:// some browsers send Origin: null
+        std::stringstream ss(raw);
+        std::string part;
+        while (std::getline(ss, part, ',')) {
+            // trim
+            size_t a = part.find_first_not_of(" \t");
+            size_t b = part.find_last_not_of(" \t");
+            if (a != std::string::npos) origins.push_back(part.substr(a, b - a + 1));
+        }
+        init = true;
+    }
+    return origins;
+}
+
+static bool originAllowed(const std::string& origin) {
+    if (origin.empty()) return true; // same-origin / non-browser
+    auto allowed = corsAllowedOrigins();
+    return std::find(allowed.begin(), allowed.end(), origin) != allowed.end();
+}
+
+void setCorsHeaders(const httplib::Request& req, httplib::Response& res) {
+    std::string origin = req.get_header_value("Origin");
+    if (originAllowed(origin)) {
+        if (!origin.empty())
+            res.set_header("Access-Control-Allow-Origin", origin);
+        else
+            res.set_header("Access-Control-Allow-Origin", "http://localhost:5500");
+        res.set_header("Vary", "Origin");
+        res.set_header("Access-Control-Allow-Credentials", "true");
+    }
+    // jika origin tidak diizinkan, jangan set Allow-Origin
     res.set_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
     res.set_header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+    res.set_header("Access-Control-Max-Age", "600");
+    res.set_header("X-Content-Type-Options", "nosniff");
+    res.set_header("X-Frame-Options", "DENY");
+    res.set_header("Referrer-Policy", "strict-origin-when-cross-origin");
+}
+
+// Compat: handlers tanpa Request — origin default localhost
+void setCorsHeaders(httplib::Response& res) {
+    res.set_header("Access-Control-Allow-Origin", "http://localhost:5500");
+    res.set_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+    res.set_header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+    res.set_header("Access-Control-Allow-Credentials", "true");
+    res.set_header("X-Content-Type-Options", "nosniff");
 }
 
 void jsonResponse(httplib::Response& res, const json& body, int status = 200) {
@@ -445,6 +722,224 @@ void jsonResponse(httplib::Response& res, const json& body, int status = 200) {
 
 void errorResponse(httplib::Response& res, const std::string& msg, int status = 400) {
     jsonResponse(res, {{"error", msg}}, status);
+}
+
+static void ysiLog(const std::string& level, const std::string& msg) {
+    std::string line = currentTimestamp() + " [" + level + "] " + msg;
+    std::cout << line << std::endl;
+    const char* path = std::getenv("YSI_LOG_FILE");
+    if (path && *path) {
+        std::ofstream ofs(path, std::ios::app);
+        if (ofs) ofs << line << "\n";
+    }
+}
+
+static void sendOrderEmail(const Order& order, const std::string& toEmail) {
+    const char* mode = std::getenv("YSI_EMAIL_MODE");
+    std::string m = mode ? mode : "file";
+    if (m == "off" || m == "none") return;
+    std::ostringstream body;
+    body << "Subject: Konfirmasi Pesanan " << order.id << " — YourShop.Id\n";
+    body << "To: " << toEmail << "\n\n";
+    body << "Halo " << order.customerName << ",\n\n";
+    body << "Pesanan " << order.id << " berhasil dibuat.\n";
+    body << "Total: " << order.total << "\n";
+    body << "Status: " << order.paymentStatus << "\n";
+    body << "Invoice: " << order.invoiceNumber << "\n\n";
+    body << "Terima kasih — YourShop.Id\n";
+    if (m == "file" || m == "log") {
+        system("mkdir -p logs 2>/dev/null");
+        std::ofstream ofs("logs/email_orders.eml", std::ios::app);
+        if (ofs) ofs << "----\n" << body.str() << "\n";
+        ysiLog("EMAIL", "confirmation for " + order.id + " -> " + toEmail);
+    } else {
+        ysiLog("EMAIL", "mode=" + m + " stub for " + order.id);
+    }
+}
+
+// ============================================================
+//  RATE LIMITING — Redis (YSI_REDIS_URL) + fallback in-memory
+//  Redis: INCR + EXPIRE (fixed window). Env contoh:
+//    YSI_REDIS_URL=redis://127.0.0.1:6379
+//    YSI_REDIS_URL=redis://:password@127.0.0.1:6379/0
+// ============================================================
+struct RateBucket {
+    std::vector<long long> hits;
+};
+static std::mutex rateMu;
+static std::unordered_map<std::string, RateBucket> rateMap;
+
+struct RedisConfig {
+    std::string host = "127.0.0.1";
+    int port = 6379;
+    std::string password;
+    int db = 0;
+    bool enabled = false;
+};
+
+static RedisConfig parseRedisUrl() {
+    RedisConfig cfg;
+    const char* env = std::getenv("YSI_REDIS_URL");
+    if (!env || !*env) return cfg;
+    std::string url = env;
+    // redis://[:password@]host[:port][/db]
+    if (url.rfind("redis://", 0) == 0) url = url.substr(8);
+    else if (url.rfind("rediss://", 0) == 0) url = url.substr(9); // TLS not implemented in mini client
+    auto at = url.rfind('@');
+    if (at != std::string::npos) {
+        std::string auth = url.substr(0, at);
+        if (!auth.empty() && auth[0] == ':') auth = auth.substr(1);
+        cfg.password = auth;
+        url = url.substr(at + 1);
+    }
+    auto slash = url.find('/');
+    if (slash != std::string::npos) {
+        cfg.db = std::atoi(url.substr(slash + 1).c_str());
+        url = url.substr(0, slash);
+    }
+    auto colon = url.find(':');
+    if (colon != std::string::npos) {
+        cfg.host = url.substr(0, colon);
+        cfg.port = std::atoi(url.substr(colon + 1).c_str());
+    } else {
+        cfg.host = url.empty() ? "127.0.0.1" : url;
+    }
+    if (cfg.port <= 0) cfg.port = 6379;
+    cfg.enabled = !cfg.host.empty();
+    return cfg;
+}
+
+static RedisConfig& redisCfg() {
+    static RedisConfig c = parseRedisUrl();
+    return c;
+}
+
+/** Minimal RESP client — one command per connection (simple & safe) */
+static std::string redisCommand(const std::vector<std::string>& args) {
+    if (!redisCfg().enabled) return "";
+    int fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (fd < 0) return "";
+
+    // timeout 200ms
+    timeval tv{0, 200000};
+    setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+    setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
+
+    sockaddr_in addr{};
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(redisCfg().port);
+    if (inet_pton(AF_INET, redisCfg().host.c_str(), &addr.sin_addr) <= 0) {
+        // try resolve hostname
+        hostent* he = gethostbyname(redisCfg().host.c_str());
+        if (!he) { close(fd); return ""; }
+        memcpy(&addr.sin_addr, he->h_addr_list[0], he->h_length);
+    }
+    if (connect(fd, (sockaddr*)&addr, sizeof(addr)) < 0) {
+        close(fd);
+        return "";
+    }
+
+    auto sendCmd = [&](const std::vector<std::string>& a) -> bool {
+        std::string buf = "*" + std::to_string(a.size()) + "\r\n";
+        for (const auto& s : a) {
+            buf += "$" + std::to_string(s.size()) + "\r\n" + s + "\r\n";
+        }
+        size_t sent = 0;
+        while (sent < buf.size()) {
+            ssize_t n = send(fd, buf.data() + sent, buf.size() - sent, 0);
+            if (n <= 0) return false;
+            sent += (size_t)n;
+        }
+        return true;
+    };
+
+    auto readResp = [&]() -> std::string {
+        char tmp[4096];
+        std::string out;
+        while (true) {
+            ssize_t n = recv(fd, tmp, sizeof(tmp), 0);
+            if (n <= 0) break;
+            out.append(tmp, tmp + n);
+            // simple: done if we have at least one complete line-based reply
+            if (out.size() >= 2 && out.find("\r\n") != std::string::npos) {
+                // for bulk/array might need more; for INCR integer :+n\r\n enough
+                if (out[0] == '+' || out[0] == '-' || out[0] == ':' || out[0] == '$')
+                    break;
+            }
+            if (out.size() > 8192) break;
+        }
+        return out;
+    };
+
+    // AUTH + SELECT if needed
+    if (!redisCfg().password.empty()) {
+        if (!sendCmd({"AUTH", redisCfg().password})) { close(fd); return ""; }
+        readResp();
+    }
+    if (redisCfg().db != 0) {
+        if (!sendCmd({"SELECT", std::to_string(redisCfg().db)})) { close(fd); return ""; }
+        readResp();
+    }
+
+    if (!sendCmd(args)) { close(fd); return ""; }
+    std::string resp = readResp();
+    close(fd);
+    return resp;
+}
+
+static long long redisIncrExpire(const std::string& key, int windowSec) {
+    // INCR key
+    std::string r = redisCommand({"INCR", key});
+    if (r.empty() || r[0] != ':') return -1; // redis unavailable
+    long long val = 0;
+    try { val = std::stoll(r.substr(1)); } catch (...) { return -1; }
+    if (val == 1) {
+        // first hit in window — set TTL
+        redisCommand({"EXPIRE", key, std::to_string(windowSec)});
+    }
+    return val;
+}
+
+static bool checkRateLimitMemory(const std::string& key, int maxHits, int windowSec) {
+    long long now = (long long)std::time(nullptr);
+    std::lock_guard<std::mutex> lock(rateMu);
+    auto& b = rateMap[key];
+    b.hits.erase(std::remove_if(b.hits.begin(), b.hits.end(),
+        [now, windowSec](long long t){ return t < now - windowSec; }), b.hits.end());
+    if ((int)b.hits.size() >= maxHits) return false;
+    b.hits.push_back(now);
+    return true;
+}
+
+/** @return true jika diizinkan; false jika melebihi limit */
+static bool checkRateLimit(const std::string& key, int maxHits, int windowSec) {
+    if (redisCfg().enabled) {
+        std::string rkey = "ysi:rl:" + key;
+        long long n = redisIncrExpire(rkey, windowSec);
+        if (n >= 0) {
+            return n <= maxHits;
+        }
+        // Redis down → fallback memory
+    }
+    return checkRateLimitMemory(key, maxHits, windowSec);
+}
+
+static std::string clientKey(const httplib::Request& req, const std::string& action) {
+    std::string ip = req.remote_addr.empty() ? "unknown" : req.remote_addr;
+    // X-Forwarded-For jika di belakang nginx/proxy (ambil IP pertama)
+    auto xff = req.get_header_value("X-Forwarded-For");
+    if (!xff.empty()) {
+        auto comma = xff.find(',');
+        ip = (comma == std::string::npos) ? xff : xff.substr(0, comma);
+        size_t a = ip.find_first_not_of(" \t");
+        size_t b = ip.find_last_not_of(" \t");
+        if (a != std::string::npos) ip = ip.substr(a, b - a + 1);
+    }
+    // X-Real-IP (nginx)
+    auto xri = req.get_header_value("X-Real-IP");
+    if (!xri.empty() && (ip == "unknown" || ip == "127.0.0.1" || ip == "::1"))
+        ip = xri;
+    return action + ":" + ip;
 }
 
 std::string currentTimestamp() {
@@ -464,14 +959,19 @@ std::string shortDate() {
 }
 
 // ============================================================
-//  AUTH — token, password hash, middleware
-//  (HMAC-lite + salted hash; ganti ke JWT+bcrypt di produksi)
+//  AUTH — JWT HS256 (OpenSSL) + PBKDF2-HMAC-SHA256 passwords
 // ============================================================
 
-static const std::string AUTH_SECRET = "YourShop.Id-secret-change-me-in-prod-2026";
+static std::string authSecret() {
+    const char* env = std::getenv("YSI_AUTH_SECRET");
+    if (env && std::strlen(env) >= 16) return std::string(env);
+    return "YourShop.Id-secret-change-me-in-prod-2026";
+}
+
 static const int TOKEN_TTL_SEC = 24 * 3600; // 24 jam
+static const int PBKDF2_ITERS  = 100000;
 static std::mutex tokenBlacklistMu;
-static std::unordered_map<std::string, long long> tokenBlacklist; // token -> exp
+static std::unordered_map<std::string, long long> tokenBlacklist;
 
 struct AuthContext {
     std::string userId;
@@ -481,57 +981,108 @@ struct AuthContext {
     long long   exp = 0;
 };
 
-static uint64_t fnv1a64(const std::string& s) {
-    uint64_t h = 14695981039346656037ull;
-    for (unsigned char c : s) {
-        h ^= c;
-        h *= 1099511628211ull;
-    }
-    return h;
-}
-
-static std::string toHex64(uint64_t v) {
+static std::string toHex(const unsigned char* data, size_t len) {
     static const char* hex = "0123456789abcdef";
-    std::string out(16, '0');
-    for (int i = 15; i >= 0; --i) {
-        out[i] = hex[v & 0xf];
-        v >>= 4;
+    std::string out(len * 2, '0');
+    for (size_t i = 0; i < len; ++i) {
+        out[i * 2]     = hex[(data[i] >> 4) & 0xf];
+        out[i * 2 + 1] = hex[data[i] & 0xf];
     }
     return out;
 }
 
-/** Hash iteratif ber-salt (bukan bcrypt; cukup untuk demo + lebih baik dari plaintext) */
-static std::string hashPassword(const std::string& password, const std::string& salt) {
-    std::string cur = salt + ":" + password + ":" + AUTH_SECRET;
-    uint64_t h = 0;
-    for (int i = 0; i < 5000; ++i) {
-        h = fnv1a64(cur + std::to_string(h) + std::to_string(i));
-        cur = toHex64(h) + salt;
+static std::string fromHex(const std::string& hex) {
+    std::string out;
+    out.reserve(hex.size() / 2);
+    for (size_t i = 0; i + 1 < hex.size(); i += 2) {
+        unsigned int v = 0;
+        std::sscanf(hex.c_str() + i, "%02x", &v);
+        out.push_back(static_cast<char>(v));
     }
-    return "ysi1$" + salt + "$" + toHex64(h);
+    return out;
 }
 
-static std::string makeSalt() {
-    auto now = std::chrono::system_clock::now().time_since_epoch().count();
-    return toHex64(fnv1a64(std::to_string(now) + AUTH_SECRET)).substr(0, 12);
+// Fallback FNV (hanya migrasi format ysi1$ lama)
+static uint64_t fnv1a64(const std::string& s) {
+    uint64_t h = 14695981039346656037ull;
+    for (unsigned char c : s) { h ^= c; h *= 1099511628211ull; }
+    return h;
+}
+static std::string toHex64(uint64_t v) {
+    static const char* hex = "0123456789abcdef";
+    std::string out(16, '0');
+    for (int i = 15; i >= 0; --i) { out[i] = hex[v & 0xf]; v >>= 4; }
+    return out;
+}
+
+static std::string makeSalt(size_t bytes) {
+    unsigned char buf[32];
+    if (RAND_bytes(buf, (int)bytes) != 1) {
+        // fallback
+        auto now = std::chrono::system_clock::now().time_since_epoch().count();
+        return toHex64(fnv1a64(std::to_string(now) + authSecret())).substr(0, bytes * 2);
+    }
+    return toHex(buf, bytes);
+}
+
+/** PBKDF2-HMAC-SHA256 — format: pbkdf2$iters$saltHex$hashHex */
+static std::string hashPassword(const std::string& password, const std::string& saltHex) {
+    std::string salt = saltHex.empty() ? makeSalt(16) : saltHex;
+    std::string saltBin = fromHex(salt);
+    if (saltBin.empty()) saltBin = salt; // if not hex
+    unsigned char out[32];
+    if (PKCS5_PBKDF2_HMAC(password.c_str(), (int)password.size(),
+                          reinterpret_cast<const unsigned char*>(saltBin.data()),
+                          (int)saltBin.size(),
+                          PBKDF2_ITERS, EVP_sha256(), 32, out) != 1) {
+        // fallback sangat jarang
+        return "ysi1$" + salt + "$" + toHex64(fnv1a64(password + salt));
+    }
+    return "pbkdf2$" + std::to_string(PBKDF2_ITERS) + "$" + salt + "$" + toHex(out, 32);
 }
 
 static bool verifyPassword(const std::string& password, const std::string& stored) {
-    // Format baru: ysi1$salt$hash
+    // Format PBKDF2
+    if (stored.rfind("pbkdf2$", 0) == 0) {
+        // pbkdf2$iters$salt$hash
+        auto p1 = stored.find('$', 7);
+        if (p1 == std::string::npos) return false;
+        auto p2 = stored.find('$', p1 + 1);
+        if (p2 == std::string::npos) return false;
+        int iters = std::atoi(stored.substr(7, p1 - 7).c_str());
+        std::string saltHex = stored.substr(p1 + 1, p2 - p1 - 1);
+        std::string expect  = stored.substr(p2 + 1);
+        std::string saltBin = fromHex(saltHex);
+        unsigned char out[32];
+        if (PKCS5_PBKDF2_HMAC(password.c_str(), (int)password.size(),
+                              reinterpret_cast<const unsigned char*>(saltBin.data()),
+                              (int)saltBin.size(),
+                              iters > 0 ? iters : PBKDF2_ITERS,
+                              EVP_sha256(), 32, out) != 1)
+            return false;
+        return toHex(out, 32) == expect;
+    }
+    // Format ysi1$ lama (migrasi)
     if (stored.rfind("ysi1$", 0) == 0) {
         auto p1 = stored.find('$', 5);
         if (p1 == std::string::npos) return false;
         std::string salt = stored.substr(5, p1 - 5);
-        return hashPassword(password, salt) == stored;
+        std::string cur = salt + ":" + password + ":" + authSecret();
+        uint64_t h = 0;
+        for (int i = 0; i < 5000; ++i) {
+            h = fnv1a64(cur + std::to_string(h) + std::to_string(i));
+            cur = toHex64(h) + salt;
+        }
+        return ("ysi1$" + salt + "$" + toHex64(h)) == stored;
     }
-    // Compat seed lama
+    // Compat seed sangat lama
     if (password == "demo" && (stored == "demo" || stored.rfind("hashed_", 0) == 0 || stored.empty()))
         return true;
     if (stored == password || stored == ("hashed_" + password)) return true;
     return false;
 }
 
-static std::string b64encode(const std::string& in) {
+static std::string b64urlEncode(const std::string& in) {
     static const char* t = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
     std::string out;
     int val = 0, valb = -6;
@@ -547,15 +1098,13 @@ static std::string b64encode(const std::string& in) {
     return out;
 }
 
-static std::string b64decode(const std::string& in) {
+static std::string b64urlDecode(const std::string& in) {
     static int T[256];
     static bool init = false;
     if (!init) {
         for (int i = 0; i < 256; i++) T[i] = -1;
-        for (int i = 0; i < 64; i++) {
-            const char* t = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
-            T[(unsigned char)t[i]] = i;
-        }
+        const char* t = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+        for (int i = 0; i < 64; i++) T[(unsigned char)t[i]] = i;
         init = true;
     }
     std::string out;
@@ -572,22 +1121,35 @@ static std::string b64decode(const std::string& in) {
     return out;
 }
 
-static std::string signPayload(const std::string& payload) {
-    return toHex64(fnv1a64(payload + "|" + AUTH_SECRET));
+/** HMAC-SHA256 → raw 32 bytes */
+static std::string hmacSha256(const std::string& key, const std::string& data) {
+    unsigned char out[EVP_MAX_MD_SIZE];
+    unsigned int outLen = 0;
+    HMAC(EVP_sha256(),
+         key.data(), (int)key.size(),
+         reinterpret_cast<const unsigned char*>(data.data()), data.size(),
+         out, &outLen);
+    return std::string(reinterpret_cast<char*>(out), outLen);
 }
 
+/** JWT standar: header.payload.signature (HS256) */
 static std::string createToken(const User& u) {
-    long long exp = (long long)std::time(nullptr) + TOKEN_TTL_SEC;
+    long long now = (long long)std::time(nullptr);
+    long long exp = now + TOKEN_TTL_SEC;
+    json header = {{"alg", "HS256"}, {"typ", "JWT"}};
     json payload = {
         {"sub", u.id},
         {"role", u.role},
         {"email", u.email},
+        {"iss", "YourShop.Id"},
+        {"iat", now},
         {"exp", exp},
-        {"iat", (long long)std::time(nullptr)},
     };
-    std::string body = b64encode(payload.dump());
-    std::string sig = signPayload(body);
-    return "ysi." + body + "." + sig;
+    std::string h = b64urlEncode(header.dump());
+    std::string p = b64urlEncode(payload.dump());
+    std::string signingInput = h + "." + p;
+    std::string sig = b64urlEncode(hmacSha256(authSecret(), signingInput));
+    return signingInput + "." + sig;
 }
 
 static bool isTokenBlacklisted(const std::string& token) {
@@ -607,17 +1169,32 @@ static void blacklistToken(const std::string& token, long long exp) {
 }
 
 static std::optional<AuthContext> verifyToken(const std::string& token) {
-    if (token.size() < 10 || token.rfind("ysi.", 0) != 0) return std::nullopt;
+    if (token.size() < 20) return std::nullopt;
     if (isTokenBlacklisted(token)) return std::nullopt;
 
-    auto p1 = token.find('.', 4);
-    if (p1 == std::string::npos) return std::nullopt;
-    std::string body = token.substr(4, p1 - 4);
-    std::string sig  = token.substr(p1 + 1);
-    if (signPayload(body) != sig) return std::nullopt;
+    // JWT: three parts
+    auto d1 = token.find('.');
+    if (d1 == std::string::npos) return std::nullopt;
+    auto d2 = token.find('.', d1 + 1);
+    if (d2 == std::string::npos) return std::nullopt;
+
+    std::string h = token.substr(0, d1);
+    std::string p = token.substr(d1 + 1, d2 - d1 - 1);
+    std::string s = token.substr(d2 + 1);
+
+    std::string signingInput = h + "." + p;
+    std::string expectSig = b64urlEncode(hmacSha256(authSecret(), signingInput));
+    if (expectSig != s) {
+        // compat token lama ysi.*
+        if (token.rfind("ysi.", 0) == 0) {
+            // tolak token format lama (paksa re-login)
+            return std::nullopt;
+        }
+        return std::nullopt;
+    }
 
     try {
-        json payload = json::parse(b64decode(body));
+        json payload = json::parse(b64urlDecode(p));
         long long exp = payload.value("exp", 0LL);
         if (exp < (long long)std::time(nullptr)) return std::nullopt;
         AuthContext ctx;
@@ -637,7 +1214,6 @@ static std::string extractBearer(const httplib::Request& req) {
     auto auth = req.get_header_value("Authorization");
     if (auth.size() > 7 && (auth.rfind("Bearer ", 0) == 0 || auth.rfind("bearer ", 0) == 0))
         return auth.substr(7);
-    // fallback query ?token=
     if (req.has_param("token")) return req.get_param_value("token");
     return "";
 }
@@ -770,6 +1346,28 @@ void handleGetProducts(const httplib::Request& req, httplib::Response& res) {
     if (sortBy == "rating")     std::sort(list.begin(), list.end(), [](const Product& a, const Product& b){ return a.rating > b.rating; });
     if (sortBy == "newest")     std::sort(list.begin(), list.end(), [](const Product& a, const Product& b){ return a.id > b.id; });
 
+    // Pagination: ?page=1&limit=20
+    int total = (int)list.size();
+    int page = req.has_param("page") ? std::max(1, std::stoi(req.get_param_value("page"))) : 1;
+    int limit = req.has_param("limit") ? std::max(1, std::min(100, std::stoi(req.get_param_value("limit")))) : total;
+    if (req.has_param("page") || req.has_param("limit")) {
+        if (!req.has_param("limit")) limit = 20;
+        int start = (page - 1) * limit;
+        if (start > total) start = total;
+        int end = std::min(start + limit, total);
+        std::vector<Product> pageList(list.begin() + start, list.begin() + end);
+        json arr = json::array();
+        for (const auto& p : pageList) arr.push_back(p.toJson());
+        jsonResponse(res, {
+            {"items", arr},
+            {"page", page},
+            {"limit", limit},
+            {"total", total},
+            {"totalPages", (total + limit - 1) / limit},
+        });
+        return;
+    }
+
     json arr = json::array();
     for (const auto& p : list) arr.push_back(p.toJson());
     jsonResponse(res, arr);
@@ -882,18 +1480,48 @@ void handleDeleteProduct(const httplib::Request& req, httplib::Response& res) {
 }
 
 // ------ GET /api/orders ------
-// Parameter kueri: customerId, status
+// Parameter: customerId, status, seller, page, limit
 void handleGetOrders(const httplib::Request& req, httplib::Response& res) {
     std::lock_guard<std::mutex> lock(store.mu);
     std::string custId = req.get_param_value("customerId");
     std::string status = req.get_param_value("status");
+    std::string seller = req.get_param_value("seller");
 
-    json arr = json::array();
+    std::vector<Order> list;
     for (const auto& o : store.orders) {
         if (!custId.empty() && o.customerId != custId) continue;
-        if (!status.empty() && o.status     != status) continue;
-        arr.push_back(o.toJson());
+        if (!status.empty() && o.status != status && normalizeStatus(o.status) != normalizeStatus(status)) continue;
+        if (!seller.empty()) {
+            bool hasSeller = false;
+            for (const auto& it : o.items) {
+                auto pit = std::find_if(store.products.begin(), store.products.end(),
+                    [&](const Product& p){ return p.id == it.productId; });
+                if (pit != store.products.end() && pit->seller == seller) { hasSeller = true; break; }
+            }
+            if (!hasSeller) continue;
+        }
+        list.push_back(o);
     }
+
+    int total = (int)list.size();
+    int page = req.has_param("page") ? std::max(1, std::stoi(req.get_param_value("page"))) : 1;
+    int limit = 20;
+    if (req.has_param("limit")) limit = std::max(1, std::min(100, std::stoi(req.get_param_value("limit"))));
+    if (req.has_param("page") || req.has_param("limit")) {
+        int start = (page - 1) * limit;
+        if (start > total) start = total;
+        int end = std::min(start + limit, total);
+        json arr = json::array();
+        for (int i = start; i < end; i++) arr.push_back(list[i].toJson());
+        jsonResponse(res, {
+            {"items", arr}, {"page", page}, {"limit", limit},
+            {"total", total}, {"totalPages", (total + limit - 1) / std::max(1, limit)},
+        });
+        return;
+    }
+
+    json arr = json::array();
+    for (const auto& o : list) arr.push_back(o.toJson());
     jsonResponse(res, arr);
 }
 
@@ -962,6 +1590,10 @@ void handleCreateOrder(const httplib::Request& req, httplib::Response& res) {
     order.total         += shippingCost;
     // pajak sederhana 8% dari subtotal (total sebelum shipping)
     double subtotal = order.total - shippingCost;
+    order.subtotal = subtotal;
+    order.commissionRate = store.commissionRate;
+    order.commission = std::round(subtotal * store.commissionRate * 100.0) / 100.0;
+    order.sellerPayout = std::round((subtotal - order.commission) * 100.0) / 100.0;
     order.total = subtotal + shippingCost + (subtotal * 0.08);
 
     order.invoiceNumber = "INV-" + std::to_string(2026) + "-" + std::to_string(++store.nextInvoiceSeq);
@@ -969,7 +1601,16 @@ void handleCreateOrder(const httplib::Request& req, httplib::Response& res) {
     order.steps[0].date = order.date;
 
     store.orders.insert(store.orders.begin(), order);
+    store.pushNotif(order.customerId, "Pesanan dibuat",
+        "Pesanan " + order.id + " menunggu pembayaran.", "order");
     store.saveToDisk();
+    ysiLog("ORDER", "created " + order.id + " total=" + std::to_string(order.total));
+    {
+        std::string email;
+        for (const auto& u : store.users)
+            if (u.id == order.customerId) { email = u.email; break; }
+        if (!email.empty()) sendOrderEmail(order, email);
+    }
     jsonResponse(res, order.toJson(), 201);
 }
 
@@ -1201,6 +1842,11 @@ void handleGetUsers(const httplib::Request& req, httplib::Response& res) {
 
 // ------ POST /api/auth/login ------
 void handleLogin(const httplib::Request& req, httplib::Response& res) {
+    if (!checkRateLimit(clientKey(req, "login"), 10, 900)) {
+        errorResponse(res, "Terlalu banyak percobaan login. Coba lagi dalam 15 menit.", 429);
+        return;
+    }
+
     json body;
     try { body = json::parse(req.body); }
     catch (...) { errorResponse(res, "Format JSON tidak valid"); return; }
@@ -1220,9 +1866,9 @@ void handleLogin(const httplib::Request& req, httplib::Response& res) {
         errorResponse(res, "Kredensial tidak valid", 401); return;
     }
 
-    // Migrasi hash lama → format ysi1$
-    if (it->passwordHash.rfind("ysi1$", 0) != 0) {
-        it->passwordHash = hashPassword(password, makeSalt());
+    // Migrasi hash lama → PBKDF2
+    if (it->passwordHash.rfind("pbkdf2$", 0) != 0) {
+        it->passwordHash = hashPassword(password, "");
         store.saveToDisk();
     }
 
@@ -1231,11 +1877,17 @@ void handleLogin(const httplib::Request& req, httplib::Response& res) {
     resp["token"] = token;
     resp["expiresIn"] = TOKEN_TTL_SEC;
     resp["tokenType"] = "Bearer";
+    ysiLog("AUTH", "login ok user=" + it->id + " role=" + it->role);
     jsonResponse(res, resp);
 }
 
 // ------ POST /api/auth/register ------
 void handleRegister(const httplib::Request& req, httplib::Response& res) {
+    if (!checkRateLimit(clientKey(req, "register"), 5, 3600)) {
+        errorResponse(res, "Terlalu banyak pendaftaran dari IP ini. Coba lagi nanti.", 429);
+        return;
+    }
+
     json body;
     try { body = json::parse(req.body); }
     catch (...) { errorResponse(res, "Format JSON tidak valid"); return; }
@@ -1260,9 +1912,16 @@ void handleRegister(const httplib::Request& req, httplib::Response& res) {
     u.id           = "u" + std::to_string(++store.nextUserSeq);
     u.name         = body["name"].get<std::string>();
     u.email        = email;
-    u.passwordHash = hashPassword(password, makeSalt());
+    u.passwordHash = hashPassword(password, "");
     u.role         = role;
     u.shopName     = body.value("shopName", "");
+    if (role == "seller") {
+        u.kycStatus = "pending";
+        u.kycNote = "Menunggu verifikasi admin";
+        u.kycUpdatedAt = currentTimestamp();
+    } else {
+        u.kycStatus = "none";
+    }
     u.phone        = body.value("phone", "");
     u.address      = body.value("address", "");
     u.createdAt    = currentTimestamp();
@@ -1326,7 +1985,7 @@ void handleChangePassword(const httplib::Request& req, httplib::Response& res) {
     if (!verifyPassword(cur, it->passwordHash)) {
         errorResponse(res, "Kata sandi saat ini salah", 401); return;
     }
-    it->passwordHash = hashPassword(neu, makeSalt());
+    it->passwordHash = hashPassword(neu, "");
     store.saveToDisk();
     // invalidate current token
     blacklistToken(auth->token, auth->exp);
@@ -1335,13 +1994,18 @@ void handleChangePassword(const httplib::Request& req, httplib::Response& res) {
 
 // ------ POST /api/auth/forgot ------ Body: { email }
 void handleForgotPassword(const httplib::Request& req, httplib::Response& res) {
+    if (!checkRateLimit(clientKey(req, "forgot"), 5, 900)) {
+        errorResponse(res, "Terlalu banyak permintaan reset. Coba lagi dalam 15 menit.", 429);
+        return;
+    }
+
     json body;
     try { body = json::parse(req.body); }
     catch (...) { errorResponse(res, "Format JSON tidak valid"); return; }
     if (!body.contains("email")) { errorResponse(res, "Email wajib"); return; }
 
     std::string email = body["email"].get<std::string>();
-    std::string resetTok = toHex64(fnv1a64(email + AUTH_SECRET + std::to_string(std::time(nullptr))));
+    std::string resetTok = makeSalt(16);
     long long exp = (long long)std::time(nullptr) + 1800; // 30 menit
 
     {
@@ -1394,7 +2058,7 @@ void handleResetPassword(const httplib::Request& req, httplib::Response& res) {
     auto uit = std::find_if(store.users.begin(), store.users.end(),
                             [&email](const User& u){ return u.email == email; });
     if (uit == store.users.end()) { errorResponse(res, "User tidak ditemukan", 404); return; }
-    uit->passwordHash = hashPassword(neu, makeSalt());
+    uit->passwordHash = hashPassword(neu, "");
     store.saveToDisk();
     jsonResponse(res, {{"message", "Kata sandi berhasil direset. Silakan masuk."}});
 }
@@ -1530,19 +2194,160 @@ void handleGetStats(const httplib::Request& req, httplib::Response& res) {
     if (!auth) return;
 
     std::lock_guard<std::mutex> lock(store.mu);
-    double revenue = 0.0;
-    for (const auto& o : store.orders) revenue += o.total;
+    double revenue = 0.0, commissionTotal = 0.0;
+    for (const auto& o : store.orders) {
+        revenue += o.total;
+        commissionTotal += o.commission;
+    }
     int sellers = 0;
     std::unordered_map<std::string, bool> seen;
     for (const auto& p : store.products) {
         if (!seen[p.seller]) { seen[p.seller] = true; sellers++; }
     }
+    int kycPending = 0;
+    for (const auto& u : store.users)
+        if (u.kycStatus == "pending") kycPending++;
     jsonResponse(res, {
         {"totalRevenue",   revenue},
+        {"totalCommission", commissionTotal},
+        {"commissionRate", store.commissionRate},
         {"totalOrders",    (int)store.orders.size()},
         {"activeProducts", (int)store.products.size()},
         {"activeSellers",  sellers},
+        {"kycPending",     kycPending},
+        {"storage",        store.useSqlite ? "sqlite" : "json"},
+        {"schemaVersion",  store.schemaVersion},
     });
+}
+
+// ------ GET /api/seller/dashboard ------
+void handleSellerDashboard(const httplib::Request& req, httplib::Response& res) {
+    auto auth = requireRole(req, res, {"seller", "admin"});
+    if (!auth) return;
+
+    std::lock_guard<std::mutex> lock(store.mu);
+    std::string shop;
+    std::string kyc = "none";
+    for (const auto& u : store.users) {
+        if (u.id == auth->userId) {
+            shop = u.shopName.empty() ? u.name : u.shopName;
+            kyc = u.kycStatus.empty() ? "none" : u.kycStatus;
+            break;
+        }
+    }
+    if (req.has_param("seller")) shop = req.get_param_value("seller");
+
+    double gmv = 0, payout = 0, commission = 0;
+    int orderCount = 0, productCount = 0;
+    json recent = json::array();
+    for (const auto& o : store.orders) {
+        bool mine = false;
+        for (const auto& it : o.items) {
+            auto pit = std::find_if(store.products.begin(), store.products.end(),
+                [&](const Product& p){ return p.id == it.productId && p.seller == shop; });
+            if (pit != store.products.end()) { mine = true; break; }
+        }
+        if (!mine) continue;
+        orderCount++;
+        gmv += o.subtotal > 0 ? o.subtotal : o.total;
+        payout += o.sellerPayout;
+        commission += o.commission;
+        if (recent.size() < 10) recent.push_back(o.toJson());
+    }
+    for (const auto& p : store.products)
+        if (p.seller == shop) productCount++;
+
+    jsonResponse(res, {
+        {"shopName", shop},
+        {"kycStatus", kyc},
+        {"productCount", productCount},
+        {"orderCount", orderCount},
+        {"gmv", gmv},
+        {"commission", commission},
+        {"sellerPayout", payout},
+        {"commissionRate", store.commissionRate},
+        {"recentOrders", recent},
+    });
+}
+
+// ------ GET /api/notifications ------
+void handleGetNotifications(const httplib::Request& req, httplib::Response& res) {
+    auto auth = requireAuth(req, res);
+    if (!auth) return;
+    std::lock_guard<std::mutex> lock(store.mu);
+    json arr = json::array();
+    int unread = 0;
+    for (const auto& n : store.notifications) {
+        if (!n.userId.empty() && n.userId != auth->userId && auth->role != "admin") continue;
+        arr.push_back(n.toJson());
+        if (!n.read) unread++;
+    }
+    jsonResponse(res, {{"items", arr}, {"unread", unread}});
+}
+
+// ------ POST /api/notifications/:id/read ------
+void handleReadNotification(const httplib::Request& req, httplib::Response& res) {
+    auto auth = requireAuth(req, res);
+    if (!auth) return;
+    int id = std::stoi(req.matches[1].str());
+    std::lock_guard<std::mutex> lock(store.mu);
+    for (auto& n : store.notifications) {
+        if (n.id == id && (n.userId.empty() || n.userId == auth->userId || auth->role == "admin")) {
+            n.read = true;
+            store.saveToDisk();
+            jsonResponse(res, n.toJson());
+            return;
+        }
+    }
+    errorResponse(res, "Notifikasi tidak ditemukan", 404);
+}
+
+// ------ POST /api/kyc/submit ------ seller mengajukan verifikasi
+void handleKycSubmit(const httplib::Request& req, httplib::Response& res) {
+    auto auth = requireRole(req, res, {"seller"});
+    if (!auth) return;
+    json body;
+    try { body = req.body.empty() ? json::object() : json::parse(req.body); }
+    catch (...) { errorResponse(res, "Format JSON tidak valid"); return; }
+
+    std::lock_guard<std::mutex> lock(store.mu);
+    auto it = std::find_if(store.users.begin(), store.users.end(),
+        [&](const User& u){ return u.id == auth->userId; });
+    if (it == store.users.end()) { errorResponse(res, "User tidak ditemukan", 404); return; }
+    it->kycStatus = "pending";
+    it->kycNote = body.value("note", "Pengajuan KYC dari penjual");
+    it->kycUpdatedAt = currentTimestamp();
+    if (body.contains("shopName") && !body["shopName"].get<std::string>().empty())
+        it->shopName = body["shopName"].get<std::string>();
+    store.pushNotif("u3", "KYC baru", it->shopName + " mengajukan verifikasi", "kyc");
+    store.saveToDisk();
+    jsonResponse(res, it->toJson());
+}
+
+// ------ POST /api/kyc/review ------ admin setujui/tolak
+void handleKycReview(const httplib::Request& req, httplib::Response& res) {
+    auto auth = requireRole(req, res, {"admin"});
+    if (!auth) return;
+    json body;
+    try { body = json::parse(req.body); }
+    catch (...) { errorResponse(res, "Format JSON tidak valid"); return; }
+    std::string userId = body.value("userId", "");
+    std::string decision = body.value("status", ""); // verified | rejected
+    if (userId.empty() || (decision != "verified" && decision != "rejected")) {
+        errorResponse(res, "userId dan status (verified|rejected) wajib"); return;
+    }
+    std::lock_guard<std::mutex> lock(store.mu);
+    auto it = std::find_if(store.users.begin(), store.users.end(),
+        [&](const User& u){ return u.id == userId; });
+    if (it == store.users.end()) { errorResponse(res, "User tidak ditemukan", 404); return; }
+    it->kycStatus = decision;
+    it->kycNote = body.value("note", decision == "verified" ? "Disetujui admin" : "Ditolak admin");
+    it->kycUpdatedAt = currentTimestamp();
+    store.pushNotif(it->id, "Status KYC",
+        decision == "verified" ? "Toko Anda telah diverifikasi!" : "Pengajuan KYC ditolak: " + it->kycNote,
+        "kyc");
+    store.saveToDisk();
+    jsonResponse(res, it->toJson());
 }
 
 // ============================================================
@@ -1550,12 +2355,35 @@ void handleGetStats(const httplib::Request& req, httplib::Response& res) {
 // ============================================================
 
 int main() {
-    httplib::Server svr;
+    // Port & TLS dari env
+    int httpPort = 8080;
+    int httpsPort = 8443;
+    if (const char* p = std::getenv("YSI_PORT")) httpPort = std::atoi(p);
+    if (const char* p = std::getenv("YSI_HTTPS_PORT")) httpsPort = std::atoi(p);
+    bool useHttps = false;
+    std::string certFile = "certs/server.crt";
+    std::string keyFile  = "certs/server.key";
+    if (const char* e = std::getenv("YSI_HTTPS")) useHttps = (std::string(e) == "1" || std::string(e) == "true");
+    if (const char* e = std::getenv("YSI_TLS_CERT")) certFile = e;
+    if (const char* e = std::getenv("YSI_TLS_KEY"))  keyFile = e;
 
-    // --- CORS Preflight ---
-    svr.Options(".*", [](const httplib::Request&, httplib::Response& res) {
-        setCorsHeaders(res);
-        res.status = 204;
+    auto wireRoutes = [](auto& svr) {
+    // --- CORS + security headers pada setiap request ---
+    svr.set_pre_routing_handler([](const httplib::Request& req, httplib::Response& res) {
+        setCorsHeaders(req, res);
+        if (req.method == "OPTIONS") {
+            res.status = 204;
+            return httplib::Server::HandlerResponse::Handled;
+        }
+        // Tolak Origin tidak diizinkan untuk request browser non-simple
+        std::string origin = req.get_header_value("Origin");
+        if (!origin.empty() && !originAllowed(origin) &&
+            (req.method == "POST" || req.method == "PUT" || req.method == "DELETE")) {
+            res.status = 403;
+            res.set_content(R"({"error":"Origin tidak diizinkan oleh CORS"})", "application/json");
+            return httplib::Server::HandlerResponse::Handled;
+        }
+        return httplib::Server::HandlerResponse::Unhandled;
     });
 
     // --- Produk ---
@@ -1596,11 +2424,16 @@ int main() {
     svr.Post("/api/promo/validate",   handleValidatePromo);
 
     // --- Statistik Admin ---
-    svr.Get("/api/stats",             handleGetStats);
+    svr.Get("/api/stats",                      handleGetStats);
+    svr.Get("/api/seller/dashboard",           handleSellerDashboard);
+    svr.Get("/api/notifications",              handleGetNotifications);
+    svr.Post("/api/notifications/(\\d+)/read", handleReadNotification);
+    svr.Post("/api/kyc/submit",                handleKycSubmit);
+    svr.Post("/api/kyc/review",                handleKycReview);
 
     // --- Cek Kesehatan ---
-    svr.Get("/api/health", [](const httplib::Request&, httplib::Response& res) {
-        setCorsHeaders(res);
+    svr.Get("/api/health", [](const httplib::Request& req, httplib::Response& res) {
+        setCorsHeaders(req, res);
         json body = {
             {"status", "ok"},
             {"service", "YourShop.Id API"},
@@ -1608,35 +2441,59 @@ int main() {
             {"products", (int)store.products.size()},
             {"orders", (int)store.orders.size()},
             {"users", (int)store.users.size()},
+            {"auth", "JWT-HS256 + PBKDF2"},
+            {"tls", std::getenv("YSI_HTTPS") ? true : false},
+            {"rateLimit", redisCfg().enabled ? "redis" : "memory"},
+            {"redis", redisCfg().enabled ?
+                (redisCfg().host + ":" + std::to_string(redisCfg().port)) : "disabled"},
         };
         res.set_content(body.dump(), "application/json");
     });
+    }; // end wireRoutes
 
     std::cout << "=====================================" << std::endl;
     std::cout << "  YourShop.Id — Server API" << std::endl;
-    std::cout << "  Mendengarkan di http://localhost:8080" << std::endl;
+    std::cout << "  Auth: JWT HS256 + PBKDF2-HMAC-SHA256" << std::endl;
+    std::cout << "  Rate-limit: login/forgot/register"
+              << (redisCfg().enabled ? " [Redis]" : " [memory]") << std::endl;
+    if (redisCfg().enabled)
+        std::cout << "  Redis: " << redisCfg().host << ":" << redisCfg().port << std::endl;
+    std::cout << "  CORS: allowlist (YSI_CORS_ORIGINS)" << std::endl;
+
+#ifdef CPPHTTPLIB_OPENSSL_SUPPORT
+    if (useHttps) {
+        std::ifstream c(certFile), k(keyFile);
+        if (!c.good() || !k.good()) {
+            std::cerr << "  [TLS] Cert/key tidak ditemukan: " << certFile
+                      << " / " << keyFile << std::endl;
+            std::cerr << "  Jalankan: bash scripts/gen_certs.sh" << std::endl;
+            std::cerr << "  Fallback ke HTTP..." << std::endl;
+            useHttps = false;
+        } else {
+            httplib::SSLServer sslSvr(certFile.c_str(), keyFile.c_str());
+            if (!sslSvr.is_valid()) {
+                std::cerr << "  [TLS] SSLServer gagal init — fallback HTTP" << std::endl;
+                useHttps = false;
+            } else {
+                wireRoutes(sslSvr);
+                std::cout << "  HTTPS https://localhost:" << httpsPort << std::endl;
+                std::cout << "=====================================" << std::endl;
+                std::cout << "  Data file: ysi_data.json" << std::endl;
+                sslSvr.listen("0.0.0.0", httpsPort);
+                return 0;
+            }
+        }
+    }
+#endif
+
+    httplib::Server svr;
+    wireRoutes(svr);
+    std::cout << "  HTTP  http://localhost:" << httpPort << std::endl;
     std::cout << "=====================================" << std::endl;
-    std::cout << std::endl;
-    std::cout << "  Endpoint:" << std::endl;
-    std::cout << "  GET    /api/products" << std::endl;
-    std::cout << "  POST   /api/products" << std::endl;
-    std::cout << "  PUT    /api/products/:id" << std::endl;
-    std::cout << "  DELETE /api/products/:id" << std::endl;
-    std::cout << "  GET    /api/orders" << std::endl;
-    std::cout << "  POST   /api/orders" << std::endl;
-    std::cout << "  PUT    /api/orders/:id/status" << std::endl;
-    std::cout << "  POST   /api/auth/login" << std::endl;
-    std::cout << "  POST   /api/auth/register" << std::endl;
-    std::cout << "  PUT    /api/users/:id" << std::endl;
-    std::cout << "  GET    /api/sellers" << std::endl;
-    std::cout << "  POST   /api/sellers/suspend" << std::endl;
-    std::cout << "  GET    /api/categories" << std::endl;
-    std::cout << "  POST   /api/promo/validate" << std::endl;
-    std::cout << "  GET    /api/stats" << std::endl;
-    std::cout << "  GET    /api/health" << std::endl;
     std::cout << "  Data file: ysi_data.json (auto save)" << std::endl;
+    std::cout << "  Env: YSI_AUTH_SECRET YSI_CORS_ORIGINS YSI_HTTPS YSI_PORT YSI_REDIS_URL" << std::endl;
     std::cout << std::endl;
 
-    svr.listen("0.0.0.0", 8080);
+    svr.listen("0.0.0.0", httpPort);
     return 0;
 }
