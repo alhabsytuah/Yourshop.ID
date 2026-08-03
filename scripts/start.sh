@@ -1,14 +1,10 @@
 #!/usr/bin/env bash
-# One-shot: deps → build → run API only
 set -euo pipefail
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-cd "$ROOT"
-
-bash scripts/fetch_deps.sh
-make -C "$ROOT" all
-echo ""
-echo "Starting YourShop.Id API on http://localhost:8080"
-echo "Open index.html via:  python3 -m http.server 5500"
-echo "Or run full stack:    make dev"
-echo ""
-exec ./server
+cd /app
+mkdir -p data logs
+./server &
+API_PID=$!
+python3 -m http.server "${WEB_PORT:-5500}" --bind 0.0.0.0 &
+WEB_PID=$!
+trap "kill $API_PID $WEB_PID 2>/dev/null" EXIT
+wait
