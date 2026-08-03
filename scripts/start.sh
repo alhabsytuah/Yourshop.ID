@@ -1,10 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
-cd /app
-mkdir -p data logs
-./server &
-API_PID=$!
-python3 -m http.server "${WEB_PORT:-5500}" --bind 0.0.0.0 &
-WEB_PID=$!
-trap "kill $API_PID $WEB_PID 2>/dev/null" EXIT
-wait
+cd "$(dirname "$0")/.."
+if [[ ! -x ./server ]]; then
+  make -j"$(nproc 2>/dev/null || echo 2)"
+fi
+exec ./server
