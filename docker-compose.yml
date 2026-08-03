@@ -1,0 +1,35 @@
+# YourShop.Id — local / staging stack
+# Usage: docker compose up --build
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+      - "5500:5500"
+    environment:
+      YSI_PORT: "8080"
+      YSI_DB: sqlite
+      YSI_REDIS_URL: redis://redis:6379
+      YSI_AUTH_SECRET: ${YSI_AUTH_SECRET:-change-me-docker-dev-secret}
+      YSI_CORS_ORIGINS: http://localhost:5500,http://127.0.0.1:5500,http://localhost:8080
+      YSI_COMMISSION_RATE: "0.05"
+      YSI_LOG_FILE: /app/logs/api.log
+      YSI_EMAIL_MODE: file
+    volumes:
+      - ysi-data:/app/data
+      - ysi-logs:/app/logs
+    depends_on:
+      - redis
+    restart: unless-stopped
+
+volumes:
+  ysi-data:
+  ysi-logs:

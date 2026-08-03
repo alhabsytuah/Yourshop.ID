@@ -3,22 +3,26 @@ server
 server.exe
 *.o
 *.out
+*.obj
 
-# Runtime data
+# Data
 ysi_data.json
+ysi_data.db
+ysi_data.db-journal
+backups/
+logs/
 
-# OS / editor
+# TLS certs (local)
+certs/
+*.key
+*.crt
+
+# Env secrets
+.env
+
+# Vendor amalgamation (download via scripts or make)
+# sqlite3.c is large — optional local only
+
+# OS
 .DS_Store
 Thumbs.db
-*.swp
-*~
-.idea/
-.vscode/
-
-# Optional local overrides
-config.local.js
-.env
-.env.*
-
-# Logs
-*.log

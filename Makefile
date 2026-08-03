@@ -1,48 +1,48 @@
 # YourShop.Id — Makefile
-# Build: make
-# Run API: make run
-# Full stack (API + static frontend): make dev
-
 CXX      ?= g++
 CXXFLAGS ?= -std=c++17 -O2 -pthread -Wall -Wno-unused-parameter
+LDFLAGS  ?= -lssl -lcrypto -ldl
 TARGET   ?= server
 SRC      ?= server.cpp
+SQLITE_O ?= sqlite3.o
 
-.PHONY: all clean run dev deps check help
+.PHONY: all clean run run-https run-sqlite dev deps check certs help backup
 
 all: $(TARGET)
 
-$(TARGET): $(SRC) httplib.h json.hpp
-	$(CXX) $(CXXFLAGS) $(SRC) -o $(TARGET)
+$(SQLITE_O): sqlite3.c sqlite3.h
+	$(CXX) -O2 -c sqlite3.c -o $(SQLITE_O) -DSQLITE_THREADSAFE=1 || gcc -O2 -c sqlite3.c -o $(SQLITE_O) -DSQLITE_THREADSAFE=1
+	@echo "✓ Built $(SQLITE_O)"
+
+$(TARGET): $(SRC) httplib.h json.hpp $(SQLITE_O)
+	$(CXX) $(CXXFLAGS) $(SRC) $(SQLITE_O) -o $(TARGET) $(LDFLAGS)
 	chmod +x $(TARGET)
 	@echo "✓ Built ./$(TARGET)"
 
 deps:
 	@bash scripts/fetch_deps.sh
 
+certs:
+	@bash scripts/gen_certs.sh
+
+backup:
+	@bash scripts/backup_data.sh
+
 run: $(TARGET)
 	./$(TARGET)
 
-# Frontend static server on :5500 + API on :8080
+run-sqlite: $(TARGET)
+	YSI_DB=sqlite ./$(TARGET)
+
+run-https: $(TARGET) certs
+	YSI_HTTPS=1 ./$(TARGET)
+
 dev: $(TARGET)
-	@echo "Starting API on :8080 and frontend on :5500 ..."
 	@bash scripts/dev.sh
 
 clean:
-	rm -f $(TARGET) ysi_data.json
-	@echo "Cleaned binary and data file (headers kept)"
-
-check:
-	@command -v $(CXX) >/dev/null || (echo "g++ not found"; exit 1)
-	@test -f httplib.h || (echo "Missing httplib.h — run: make deps"; exit 1)
-	@test -f json.hpp || (echo "Missing json.hpp — run: make deps"; exit 1)
-	@echo "✓ Dependencies OK"
+	rm -f $(TARGET) $(SQLITE_O) ysi_data.json
 
 help:
-	@echo "Targets:"
-	@echo "  make / make all   Build C++ API server"
-	@echo "  make deps         Download httplib.h + json.hpp"
-	@echo "  make run          Run API on http://localhost:8080"
-	@echo "  make dev          API + frontend (ports 8080 + 5500)"
-	@echo "  make clean        Remove binary and ysi_data.json"
-	@echo "  make check        Verify toolchain and headers"
+	@echo "make | make run | make run-sqlite | make backup | make run-https"
+	@echo "Env: YSI_DB=sqlite YSI_REDIS_URL YSI_COMMISSION_RATE YSI_AUTH_SECRET"
