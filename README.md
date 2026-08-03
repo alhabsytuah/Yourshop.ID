@@ -1,142 +1,60 @@
 # YourShop.Id
 
-Marketplace demo (frontend HTML/CSS/JS + backend REST C++).
+Marketplace demo (UI bergaya eBay) + API REST C++17.
 
-UI terinspirasi eBay, bahasa Indonesia, mata uang Rp / USD, auth token, checkout, pembayaran mock, invoice, kurir, batalkan/return pesanan.
+## Fitur utama
 
----
+- Frontend: HTML/CSS/JS, dark mode, i18n ID/EN, compare/share, footer legal
+- Backend: JWT HS256 + PBKDF2, rate limit (memory/Redis), CORS ketat, SQLite opsional
+- Bisnis: pembayaran mock, komisi platform, KYC seller, notifikasi server, pagination
+- Deploy: Docker Compose, nginx, Let's Encrypt scripts, CI GitHub Actions
+
+## Jalankan lokal
+
+```bash
+# Dependensi header (httplib + json)
+bash scripts/fetch_deps.sh
+
+# SQLite amalgamation (opsional — atau unduh dari sqlite.org)
+# letakkan sqlite3.c + sqlite3.h di root project
+
+make          # butuh g++, libssl-dev
+./server      # http://localhost:8080
+
+# Frontend
+python3 -m http.server 5500
+# buka http://localhost:5500
+```
+
+Akun demo: `buyer@demo.com` / `seller@demo.com` / `admin@demo.com` — password `demo`
+
+## Docker
+
+```bash
+docker compose up --build
+```
+
+## Env penting
+
+| Variabel | Keterangan |
+|----------|------------|
+| `YSI_AUTH_SECRET` | Secret JWT (≥16 karakter) |
+| `YSI_DB=sqlite` | Persistensi SQLite |
+| `YSI_REDIS_URL` | Rate limit Redis |
+| `YSI_CORS_ORIGINS` | Origin diizinkan |
+| `YSI_COMMISSION_RATE` | Komisi default 0.05 |
+
+Lihat `.env.example` dan `DEPLOY.md`.
 
 ## Struktur
 
-```
-artifacts/
-├── index.html          # UI utama
-├── main.js             # Logika frontend
-├── assets.js           # Brand tokens / SVG
-├── config.js           # URL API (edit di sini)
-├── server.cpp          # Backend REST C++17
-├── httplib.h           # cpp-httplib (single-header)
-├── json.hpp            # nlohmann/json (single-header)
-├── Makefile
-├── scripts/
-│   ├── fetch_deps.sh   # Unduh header jika belum ada
-│   ├── start.sh        # Build + jalankan API
-│   └── dev.sh          # API + static frontend
-└── README.md
-```
+- `index.html` `main.js` `assets.js` `config.js` — frontend
+- `server.cpp` — API C++
+- `scripts/` — build, deploy, test, certs, redis
+- `nginx/` — reverse proxy
+- `.github/workflows/ci.yml` — CI
 
----
+## Catatan
 
-## Prasyarat
-
-- **g++** dengan C++17 (`build-essential` di Debian/Ubuntu)
-- **curl** atau **wget** (untuk unduh dependency)
-- **Python 3** (opsional, untuk `make dev` — static file server)
-
-```bash
-# Ubuntu / Debian
-sudo apt update && sudo apt install -y build-essential curl python3
-```
-
----
-
-## Menjalankan (cepat)
-
-```bash
-cd artifacts   # atau folder project ini
-
-# 1) Dependency header (sekali)
-make deps
-# atau: bash scripts/fetch_deps.sh
-
-# 2) Build server
-make
-
-# 3a) Hanya API
-make run
-# → http://localhost:8080/api/health
-
-# 3b) API + frontend sekaligus
-make dev
-# → Frontend http://localhost:5500/
-# → API      http://localhost:8080/api
-```
-
-Buka browser di **http://localhost:5500/** (bukan `file://`) agar `fetch` ke API tidak diblok CORS/file origin.
-
-### Akun demo
-
-| Role   | Email             | Password |
-|--------|-------------------|----------|
-| Buyer  | buyer@demo.com    | demo     |
-| Seller | seller@demo.com   | demo     |
-| Admin  | admin@demo.com    | demo     |
-
----
-
-## Konfigurasi
-
-Edit `config.js`:
-
-```js
-window.YourShopConfig = {
-  apiBase: 'http://localhost:8080/api',
-};
-```
-
-Jika API di host/port lain, ubah `apiBase` saja.
-
-Data persistensi server disimpan di **`ysi_data.json`** (otomatis dibuat saat order/produk berubah).
-
----
-
-## API ringkas
-
-| Method | Path | Keterangan |
-|--------|------|------------|
-| GET | `/api/health` | Health check |
-| GET | `/api/products` | Katalog |
-| POST | `/api/auth/login` | Login → token |
-| POST | `/api/orders` | Buat pesanan |
-| POST | `/api/orders/:id/pay` | Bayar (mock) |
-| POST | `/api/orders/:id/cancel` | Batalkan |
-| POST | `/api/orders/:id/return` | Return/refund |
-| GET | `/api/orders/:id/invoice` | Invoice JSON |
-
-Header auth: `Authorization: Bearer <token>`.
-
----
-
-## Offline frontend
-
-Jika server C++ tidak jalan, frontend tetap memakai **seed data lokal** (keranjang, checkout offline, dll.). Fitur yang butuh token server (suspend seller, majukan status via API, ubah password) memerlukan API online.
-
----
-
-## Docker (opsional)
-
-```bash
-docker build -t yourshop .
-docker run --rm -p 8080:8080 -p 5500:5500 yourshop
-```
-
----
-
-## Troubleshooting
-
-| Masalah | Solusi |
-|---------|--------|
-| `httplib.h: No such file` | `make deps` |
-| CORS / failed fetch | Buka lewat `http://localhost:5500`, bukan `file://` |
-| Port 8080 dipakai | Hentikan proses lain atau ubah port di `server.cpp` (`svr.listen`) |
-| Login gagal setelah update auth | Hapus `ysi_data.json` agar seed user di-hash ulang, atau pakai password `demo` |
-| g++ not found | Install `build-essential` |
-
----
-
-## Lisensi dependensi
-
-- [cpp-httplib](https://github.com/yhirose/cpp-httplib) — MIT  
-- [nlohmann/json](https://github.com/nlohmann/json) — MIT  
-
-Project demo YourShop.Id untuk pembelajaran / prototipe.
+Binary `server` di repo mungkin usang — selalu build ulang dengan `make`.
+File besar `sqlite3.c` tidak di-commit; unduh amalgamation SQLite jika memakai `YSI_DB=sqlite`.
