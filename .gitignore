@@ -3,26 +3,39 @@ server
 server.exe
 *.o
 *.out
-*.obj
 
-# Data
+# Runtime data
 ysi_data.json
 ysi_data.db
 ysi_data.db-journal
-backups/
-logs/
+*.db
+*.db-journal
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp
+*~
+.idea/
+.vscode/
+
+# Optional local overrides
+config.local.js
+.env
+.env.*
+
+# Logs
+*.log
 
 # TLS certs (local)
 certs/
 *.key
 *.crt
 
-# Env secrets
-.env
+# Large amalgamation (download via scripts/fetch_deps or make)
+# Keep sqlite3.h if needed; sqlite3.c is ~9MB — prefer system libsqlite3
+sqlite3.c
+sqlite3.o
 
-# Vendor amalgamation (download via scripts or make)
-# sqlite3.c is large — optional local only
-
-# OS
-.DS_Store
-Thumbs.db
+# Archives / binaries
+yourshop-source.tar.gz

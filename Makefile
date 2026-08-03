@@ -1,4 +1,3 @@
-# YourShop.Id — Makefile
 CXX      ?= g++
 CXXFLAGS ?= -std=c++17 -O2 -pthread -Wall -Wno-unused-parameter
 LDFLAGS  ?= -lssl -lcrypto -ldl
@@ -11,7 +10,7 @@ SQLITE_O ?= sqlite3.o
 all: $(TARGET)
 
 $(SQLITE_O): sqlite3.c sqlite3.h
-	$(CXX) -O2 -c sqlite3.c -o $(SQLITE_O) -DSQLITE_THREADSAFE=1 || gcc -O2 -c sqlite3.c -o $(SQLITE_O) -DSQLITE_THREADSAFE=1
+	$(CXX) -O2 -c sqlite3.c -o $(SQLITE_O) -DSQLITE_THREADSAFE=1
 	@echo "✓ Built $(SQLITE_O)"
 
 $(TARGET): $(SRC) httplib.h json.hpp $(SQLITE_O)
