@@ -98,14 +98,33 @@ Data persistensi server disimpan di **`ysi_data.json`** (otomatis dibuat saat or
 | GET | `/api/products` | Katalog |
 | POST | `/api/auth/login` | Login → token |
 | POST | `/api/orders` | Buat pesanan |
-| POST | `/api/orders/:id/pay` | Bayar (mock) |
+| POST | `/api/orders/:id/pay` | Bayar (Midtrans Snap / mock) |
 | POST | `/api/orders/:id/cancel` | Batalkan |
 | POST | `/api/orders/:id/return` | Return/refund |
 | GET | `/api/orders/:id/invoice` | Invoice JSON |
+| GET | `/api/payments/config` | Client key + URL Snap.js |
+| POST | `/api/payments/midtrans/notification` | Webhook Midtrans |
 
 Header auth: `Authorization: Bearer <token>`.
 
 ---
+
+## Pembayaran (Midtrans Snap)
+
+1. Buat akun [Midtrans Sandbox](https://dashboard.sandbox.midtrans.com).
+2. Salin **Server Key** & **Client Key** ke environment:
+
+```bash
+export MIDTRANS_SERVER_KEY=SB-Mid-server-xxxx
+export MIDTRANS_CLIENT_KEY=SB-Mid-client-xxxx
+export MIDTRANS_IS_PRODUCTION=0
+export YSI_IDR_RATE=16000   # konversi harga internal → IDR
+```
+
+3. Restart API. `GET /api/health` menampilkan `"payment":"midtrans"`.
+4. Di dashboard Midtrans, set **Payment Notification URL** ke:
+   `https://your-domain/api/payments/midtrans/notification`
+5. Tanpa key, tombol bayar tetap memakai **mock** (langsung `paid`).
 
 ## Offline frontend
 
