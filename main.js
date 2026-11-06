@@ -308,6 +308,9 @@ const SEED_PRODUCTS = [
   { id:10, name:'Linen Throw Blanket', emoji:'🛋️', imageUrl:'https://images.unsplash.com/photo-1584100936595-4f6540c2f0b2?w=600&h=600&fit=crop', price:38.00, oldPrice:null, category:'Rumah', seller:'CozyHome', rating:4.6, reviews:1, badge:'Baru', stock:true, stockQty:20, desc:'Linen Eropa 100% stonewash. Ringan dan bernapas.', tags:['linen','home'], featured:false, variants:[{id:1,label:'Natural',color:'Natural',priceDelta:0,stock:8},{id:2,label:'Sage',color:'Sage',priceDelta:0,stock:6},{id:3,label:'Terracotta',color:'Terracotta',priceDelta:3,stock:6}] },
   { id:11, name:'Running Shoes Ultra', emoji:'👟', imageUrl:'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=600&h=600&fit=crop', price:95.00, oldPrice:120.00, category:'Fashion', seller:'SpeedStep', rating:4.5, reviews:2, badge:'Diskon', stock:true, stockQty:12, desc:'Sol tengah busa responsif dan mesh bernapas. Ringan untuk lari jarak jauh.', tags:['shoes','running'], featured:false, variants:[{id:1,label:'40 / Hitam',size:'40',color:'Hitam',priceDelta:0,stock:2},{id:2,label:'41 / Hitam',size:'41',color:'Hitam',priceDelta:0,stock:3},{id:3,label:'42 / Putih',size:'42',color:'Putih',priceDelta:0,stock:3},{id:4,label:'43 / Putih',size:'43',color:'Putih',priceDelta:0,stock:2},{id:5,label:'44 / Merah',size:'44',color:'Merah',priceDelta:5,stock:2}] },
   { id:12, name:'Cold Brew Concentrate', emoji:'🧃', imageUrl:'https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?w=600&h=600&fit=crop', price:16.50, oldPrice:null, category:'Makanan', seller:'BrewHouse', rating:4.7, reviews:1, badge:null, stock:true, stockQty:60, desc:'Kopi cold brew siap diencerkan. Direndam 20 jam. Encerkan 1:3.', tags:['coffee','cold brew'], featured:false, variants:[{id:1,label:'250ml',size:'250ml',priceDelta:0,stock:30},{id:2,label:'500ml',size:'500ml',priceDelta:8,stock:20},{id:3,label:'1L',size:'1L',priceDelta:18,stock:10}] },
+  { id:13, name:'Oli Mesin Synthetic 5W-30', emoji:'🛢️', imageUrl:'https://images.unsplash.com/photo-1486262715619-67b85e0b08d3?w=600&h=600&fit=crop', price:32.00, oldPrice:39.00, category:'Otomotif', seller:'AutoPartID', rating:4.8, reviews:2, badge:'Diskon', stock:true, stockQty:48, desc:'Oli mesin fully synthetic 5W-30 untuk mesin bensin. Perlindungan anti-aus dan hemat bahan bakar. Isi 4 liter.', tags:['oli','mesin','sparepart'], featured:true, variants:[{id:1,label:'4L',size:'4L',priceDelta:0,stock:30},{id:2,label:'1L',size:'1L',priceDelta:-18,stock:18}] },
+  { id:14, name:'Kampas Rem Ceramic Depan', emoji:'🛑', imageUrl:'https://images.unsplash.com/photo-1492144534655-ae79c964c9d7?w=600&h=600&fit=crop', price:28.50, oldPrice:null, category:'Otomotif', seller:'BrakePro', rating:4.6, reviews:1, badge:'Baru', stock:true, stockQty:36, desc:'Kampas rem ceramic low-dust untuk roda depan. Cocok sedan & hatchback populer. Termasuk sensor keausan.', tags:['rem','kampas','sparepart'], featured:false, variants:[{id:1,label:'Sedan',size:'Sedan',priceDelta:0,stock:20},{id:2,label:'MPV',size:'MPV',priceDelta:5,stock:16}] },
+  { id:15, name:'Aki Kering 12V 60Ah', emoji:'🔋', imageUrl:'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=600&h=600&fit=crop', price:75.00, oldPrice:89.00, category:'Otomotif', seller:'AutoPartID', rating:4.7, reviews:1, badge:'Diskon', stock:true, stockQty:20, desc:'Aki kering maintenance-free 12V 60Ah. Daya cranking tinggi, tahan getaran. Garansi resmi 12 bulan.', tags:['aki','battery','sparepart'], featured:false, variants:[{id:1,label:'60Ah',size:'60Ah',priceDelta:0,stock:12},{id:2,label:'70Ah',size:'70Ah',priceDelta:15,stock:8}] },
 ];
 
 // Seed reviews (hanya jika localStorage kosong)
@@ -534,13 +537,26 @@ function starsRaw(rating, reviews) {
 // ============================================================
 
 function showPage(name) {
+  const known = [
+    'store','detail','cart','orders','login','become-seller','admin',
+    'profile','settings','help','deals','checkout','payment','watchlist',
+    'notifications','terms','privacy','contact'
+  ];
+  if (!known.includes(name)) {
+    console.warn('Page not found:', name);
+    toast('Halaman tidak ditemukan', 'error');
+    name = 'store';
+  }
   const page = document.getElementById('page-' + name);
-  if (!page) { console.warn('Page not found:', name); return; }
+  if (!page) { console.warn('DOM page missing:', name); return; }
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   page.classList.add('active');
   window.scrollTo(0, 0);
   const catBar = document.querySelector('.cat-bar');
   if (catBar) catBar.style.display = (name === 'store') ? 'flex' : 'none';
+
+  // Remember for refresh after language/theme change
+  try { sessionStorage.setItem('ysi-last-page', name); } catch (_) {}
 
   if (name === 'cart')          renderCart();
   if (name === 'orders')        refreshOrders().then(() => renderOrders());
@@ -561,13 +577,16 @@ function showPage(name) {
       if (unpaid) renderPaymentPage(unpaid.id);
       else {
         const el = document.getElementById('payment-content');
-        if (el) el.innerHTML = `<div class="empty-cart"><p>Tidak ada pembayaran tertunda</p>
-          <button class="btn btn-primary" onclick="showPage('orders')">Pesanan Saya</button></div>`;
+        if (el) el.innerHTML = `<div class="empty-cart"><div class="empty-icon">💳</div>
+          <p>Tidak ada pembayaran tertunda</p>
+          <button class="btn btn-primary" onclick="showPage('orders')">Pesanan Saya</button>
+          <button class="tbl-btn" style="margin-top:0.5rem" onclick="showPage('store')">Lanjut Belanja</button></div>`;
       }
     }
   }
   if (name === 'watchlist')     renderWatchlist();
   if (name === 'notifications') renderNotifications();
+  // become-seller, login, detail: static / rendered elsewhere
 }
 
 // ============================================================
@@ -944,6 +963,169 @@ function filterCategory(cat, btn) {
 
 function applyFilters()      { renderProducts(); }
 function handleSearch(val)   { currentSearch = val.toLowerCase(); renderProducts(); }
+
+/* eBay-style hero promo slides — full auto carousel */
+const HERO_SLIDES = [
+  {
+    title: 'Hemat hingga 20% hari ini',
+    text: 'Temukan penawaran terbaik dari penjual terverifikasi. Mulai belanja atau jual barangmu sekarang.',
+    cta: 'Ambil Kupon',
+    ctaSecondary: 'Lihat Produk',
+    ctaAction: "showPage('deals')",
+    ctaSecondaryAction: "document.querySelector('.shop-layout')?.scrollIntoView({behavior:'smooth'})",
+    bg: '#7FDBDA',
+    cards: [
+      { icon: '🏷️', label: 'Hemat' },
+      { icon: '🎟️', label: 'Kupon' },
+      { icon: '', label: '20%<br>OFF', accent: true }
+    ]
+  },
+  {
+    title: 'Cari. Belanja. Jual.',
+    text: 'Ribuan produk dari penjual independen di seluruh Indonesia — siap dikirim ke rumahmu.',
+    cta: 'Lihat Produk',
+    ctaSecondary: 'Mulai Jual',
+    ctaAction: "document.querySelector('.shop-layout')?.scrollIntoView({behavior:'smooth'})",
+    ctaSecondaryAction: "showPage('become-seller')",
+    bg: '#A8D5E5',
+    cards: [
+      { icon: '🔍', label: 'Cari' },
+      { icon: '🛒', label: 'Belanja' },
+      { icon: '', label: 'Jual', accent: true }
+    ]
+  },
+  {
+    title: 'Mulai berjualan hari ini',
+    text: 'Gratis daftar sebagai penjual. Jangkau pembeli baru tanpa biaya bulanan di masa demo.',
+    cta: 'Jadi Penjual',
+    ctaSecondary: 'Pelajari',
+    ctaAction: "showPage('become-seller')",
+    ctaSecondaryAction: "showPage('help')",
+    bg: '#B8E0D2',
+    cards: [
+      { icon: '📦', label: 'Stok' },
+      { icon: '📈', label: 'Naik' },
+      { icon: '', label: 'Gratis', accent: true }
+    ]
+  },
+  {
+    title: 'Deals & outlet merek',
+    text: 'Diskon pilihan diperbarui setiap hari. Cek halaman Deals sebelum stok habis.',
+    cta: 'Buka Deals',
+    ctaSecondary: 'Watchlist',
+    ctaAction: "showPage('deals')",
+    ctaSecondaryAction: "showPage('watchlist')",
+    bg: '#9ED9F0',
+    cards: [
+      { icon: '⚡', label: 'Flash' },
+      { icon: '⭐', label: 'Outlet' },
+      { icon: '', label: 'HOT', accent: true }
+    ]
+  }
+];
+let heroIndex = 0;
+let heroTimer = null;
+const HERO_INTERVAL_MS = 5000;
+
+function renderHeroSlide(index) {
+  const n = HERO_SLIDES.length;
+  if (!n) return;
+  heroIndex = ((index % n) + n) % n;
+  const s = HERO_SLIDES[heroIndex];
+  const banner = document.getElementById('hero-banner');
+  if (!banner) return;
+
+  banner.classList.add('hero-fade');
+  banner.style.background = s.bg;
+
+  const h1 = banner.querySelector('h1');
+  const p = banner.querySelector('.hero-left p');
+  const primaryBtn = banner.querySelector('.hero-cta .btn-primary');
+  const secondaryBtn = banner.querySelector('.hero-cta .btn-outline');
+  if (h1) h1.textContent = s.title;
+  if (p) p.textContent = s.text;
+  if (primaryBtn) {
+    primaryBtn.textContent = s.cta;
+    primaryBtn.setAttribute('onclick', s.ctaAction);
+  }
+  if (secondaryBtn && s.ctaSecondary) {
+    secondaryBtn.textContent = s.ctaSecondary;
+    secondaryBtn.setAttribute('onclick', s.ctaSecondaryAction || '');
+  }
+
+  const right = banner.querySelector('.hero-right');
+  if (right && s.cards) {
+    right.innerHTML = s.cards.map((c, i) => {
+      const accent = c.accent ? ' hero-card-accent' : '';
+      const icon = c.icon ? `<span class="hero-card-icon">${c.icon}</span>` : '';
+      return `<div class="hero-card${accent}">${icon}<span class="hero-card-label">${c.label}</span></div>`;
+    }).join('');
+  }
+
+  banner.querySelectorAll('.hero-dots span').forEach((dot, i) => {
+    dot.classList.toggle('active', i === heroIndex);
+  });
+
+  requestAnimationFrame(() => {
+    banner.classList.remove('hero-fade');
+    banner.classList.add('hero-show');
+    setTimeout(() => banner.classList.remove('hero-show'), 400);
+  });
+}
+
+function cycleHero(dir) {
+  renderHeroSlide(heroIndex + (dir || 1));
+  restartHeroAutoplay();
+}
+
+function goHero(index) {
+  renderHeroSlide(index);
+  restartHeroAutoplay();
+}
+
+function startHeroAutoplay() {
+  stopHeroAutoplay();
+  heroTimer = setInterval(() => {
+    // only advance when store page is visible
+    const store = document.getElementById('page-store');
+    if (store && store.classList.contains('active')) {
+      renderHeroSlide(heroIndex + 1);
+    }
+  }, HERO_INTERVAL_MS);
+}
+
+function stopHeroAutoplay() {
+  if (heroTimer) {
+    clearInterval(heroTimer);
+    heroTimer = null;
+  }
+}
+
+function restartHeroAutoplay() {
+  startHeroAutoplay();
+}
+
+function initHeroCarousel() {
+  const banner = document.getElementById('hero-banner');
+  if (!banner) return;
+
+  // clickable dots
+  banner.querySelectorAll('.hero-dots span').forEach((dot, i) => {
+    dot.style.cursor = 'pointer';
+    dot.setAttribute('role', 'button');
+    dot.setAttribute('aria-label', 'Slide ' + (i + 1));
+    dot.onclick = () => goHero(i);
+  });
+
+  // pause on hover / focus
+  banner.addEventListener('mouseenter', stopHeroAutoplay);
+  banner.addEventListener('mouseleave', startHeroAutoplay);
+  banner.addEventListener('focusin', stopHeroAutoplay);
+  banner.addEventListener('focusout', startHeroAutoplay);
+
+  renderHeroSlide(0);
+  startHeroAutoplay();
+}
 
 // ============================================================
 //  PRODUCT DETAIL
@@ -1358,7 +1540,37 @@ function selectShipMethod(id, el) {
   if (document.querySelector('.page.active')?.id === 'page-checkout') renderCheckout();
 }
 
-async function payOrder(orderId, simulateFail = false) {
+/** Load Midtrans Snap.js once (sandbox or production URL from config). */
+let _snapScriptPromise = null;
+function loadSnapScript(snapJsUrl, clientKey) {
+  if (window.snap && typeof window.snap.pay === 'function') return Promise.resolve();
+  if (_snapScriptPromise) return _snapScriptPromise;
+  _snapScriptPromise = new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = snapJsUrl || 'https://app.sandbox.midtrans.com/snap/snap.js';
+    s.setAttribute('data-client-key', clientKey || '');
+    s.onload = () => resolve();
+    s.onerror = () => { _snapScriptPromise = null; reject(new Error('Gagal memuat Midtrans Snap.js')); };
+    document.head.appendChild(s);
+  });
+  return _snapScriptPromise;
+}
+
+async function openMidtransSnap(gateway) {
+  const token = gateway?.snapToken;
+  if (!token) throw new Error('Snap token kosong');
+  await loadSnapScript(gateway.snapJsUrl, gateway.clientKey);
+  return new Promise((resolve) => {
+    window.snap.pay(token, {
+      onSuccess: (result) => resolve({ status: 'success', result }),
+      onPending: (result) => resolve({ status: 'pending', result }),
+      onError: (result) => resolve({ status: 'error', result }),
+      onClose: () => resolve({ status: 'closed' }),
+    });
+  });
+}
+
+async function payOrder(orderId, simulateFail = false, forceMock = false) {
   const o = ordersList.find(x => x.id === orderId);
   if (!o) { toast('Pesanan tidak ditemukan', 'error'); return; }
   try {
@@ -1366,9 +1578,61 @@ async function payOrder(orderId, simulateFail = false) {
       const updated = await apiRequest('POST', '/orders/' + encodeURIComponent(orderId) + '/pay', {
         paymentMethod: checkoutPayMethod || o.paymentMethod,
         simulateFail,
+        forceMock,
       });
       const i = ordersList.findIndex(x => x.id === orderId);
       if (i >= 0) ordersList[i] = normalizeOrder(updated);
+
+      const gw = updated.gateway || {};
+      if (gw.provider === 'midtrans' && gw.snapToken && !simulateFail) {
+        toast('Membuka Midtrans Snap…', 'success');
+        // attach snapJsUrl from payment config if missing
+        if (!gw.snapJsUrl) {
+          try {
+            const cfg = await apiRequest('GET', '/payments/config');
+            gw.snapJsUrl = cfg.snapJsUrl;
+            if (!gw.clientKey) gw.clientKey = cfg.clientKey;
+          } catch (_) {}
+        }
+        const snapResult = await openMidtransSnap(gw);
+        if (snapResult.status === 'success') {
+          // Webhook will mark paid; optimistically refresh
+          await refreshOrders();
+          const paid = ordersList.find(x => x.id === orderId);
+          if (paid) paid.paymentStatus = paid.paymentStatus === 'paid' ? 'paid' : 'paid';
+          pendingPaymentOrderId = null;
+          toast('Pembayaran berhasil!', 'success');
+          pushNotif('💳', 'Pembayaran berhasil', `Pesanan ${orderId} telah dibayar.`);
+          showPage('orders');
+          renderOrders();
+          return;
+        }
+        if (snapResult.status === 'pending') {
+          toast('Menunggu pembayaran. Selesaikan di aplikasi bank/e-wallet.', 'success');
+          await refreshOrders();
+          showPage('orders');
+          renderOrders();
+          return;
+        }
+        if (snapResult.status === 'error') {
+          toast('Pembayaran gagal di Midtrans', 'error');
+          return;
+        }
+        // closed without paying
+        toast('Pembayaran dibatalkan. Anda bisa bayar nanti dari Pesanan Saya.', '');
+        showPage('orders');
+        return;
+      }
+
+      // Mock / already paid path
+      if (updated.paymentStatus === 'paid' || gw.provider?.includes?.('mock')) {
+        pendingPaymentOrderId = null;
+        toast('Pembayaran berhasil' + (gw.provider?.includes?.('mock') ? ' (mock)' : ''), 'success');
+        pushNotif('💳', 'Pembayaran berhasil', `Pesanan ${orderId} telah dibayar.`);
+        showPage('orders');
+        renderOrders();
+        return;
+      }
     } else {
       if (simulateFail) { toast('Pembayaran gagal (simulasi)', 'error'); return; }
       o.paymentStatus = 'paid';
@@ -1498,7 +1762,7 @@ function showInvoice(orderId) {
   document.getElementById('track-modal').classList.add('open');
 }
 
-function renderPaymentPage(orderId) {
+async function renderPaymentPage(orderId) {
   const el = document.getElementById('payment-content') || document.getElementById('checkout-content');
   const page = document.getElementById('page-payment') || document.getElementById('page-checkout');
   if (page) {
@@ -1507,15 +1771,30 @@ function renderPaymentPage(orderId) {
   }
   const o = ordersList.find(x => x.id === orderId);
   if (!el || !o) return;
-  const methodLabel = { transfer: 'Transfer Bank', ewallet: 'E-Wallet', card: 'Kartu Kredit/Debit' }[o.paymentMethod] || o.paymentMethod;
+
+  let payCfg = { provider: 'mock', enabled: false };
+  if (apiOnline) {
+    try { payCfg = await apiRequest('GET', '/payments/config'); } catch (_) {}
+  }
+  const isMidtrans = payCfg.enabled || payCfg.provider === 'midtrans';
+  const methodLabel = { transfer: 'Transfer Bank', ewallet: 'E-Wallet', card: 'Kartu Kredit/Debit' }[o.paymentMethod] || o.paymentMethod || '—';
+  const gwLabel = isMidtrans
+    ? `Midtrans Snap (${payCfg.isProduction ? 'production' : 'sandbox'})`
+    : 'YourShopPay (mock)';
+  const gwHint = isMidtrans
+    ? 'Anda akan diarahkan ke jendela Midtrans (VA, e-wallet, kartu, QRIS). Status final dikonfirmasi via webhook.'
+    : 'Gateway mock — set <code>MIDTRANS_SERVER_KEY</code> &amp; <code>MIDTRANS_CLIENT_KEY</code> di server untuk pembayaran nyata.';
+
   el.innerHTML = `
     <h1>Pembayaran</h1>
     <p class="page-sub">Pesanan ${o.id} · Invoice ${o.invoiceNumber || '—'}</p>
     <div class="content-card" style="max-width:480px">
       <div class="summary-row total"><span>Total dibayar</span><span>${formatMoney(o.total)}</span></div>
-      <p style="font-size:13px;color:var(--text2);margin:1rem 0">Metode: <strong>${methodLabel}</strong></p>
-      <p style="font-size:12px;color:var(--text3);margin-bottom:1rem">Gateway: YourShopPay (simulasi). Tidak ada charge nyata.</p>
-      <button class="checkout-btn" onclick="payOrder('${o.id}')">Bayar Sekarang</button>
+      <p style="font-size:13px;color:var(--text2);margin:1rem 0">Metode preferensi: <strong>${methodLabel}</strong></p>
+      <p style="font-size:12px;color:var(--text3);margin-bottom:0.35rem">Gateway: <strong>${gwLabel}</strong></p>
+      <p style="font-size:12px;color:var(--text3);margin-bottom:1rem">${gwHint}</p>
+      <button class="checkout-btn" onclick="payOrder('${o.id}')">${isMidtrans ? 'Bayar dengan Midtrans' : 'Bayar Sekarang (mock)'}</button>
+      ${isMidtrans ? `<button class="tbl-btn" style="width:100%;margin-top:0.5rem;justify-content:center" onclick="payOrder('${o.id}', false, true)">Bayar mock (bypass Midtrans)</button>` : ''}
       <button class="tbl-btn" style="width:100%;margin-top:0.5rem;justify-content:center" onclick="payOrder('${o.id}', true)">Simulasi Gagal Bayar</button>
       <button class="tbl-btn" style="width:100%;margin-top:0.5rem;justify-content:center" onclick="showPage('orders')">Bayar nanti</button>
     </div>`;
@@ -1829,7 +2108,7 @@ function renderAdmin(tab) {
           <div class="form-group"><label>Harga (${cur.code})</label><input type="number" id="np-price" placeholder="${priceHint}" step="any"></div>
           <div class="form-group"><label>Harga Coret / Diskon (${cur.code})</label><input type="number" id="np-oldprice" placeholder="opsional" step="any"></div>
           <div class="form-group"><label>Kategori</label>
-            <select id="np-cat"><option>Elektronik</option><option>Fashion</option><option>Rumah</option><option>Buku</option><option>Olahraga</option><option>Makanan</option><option>Seni</option></select>
+            <select id="np-cat"><option>Elektronik</option><option>Fashion</option><option>Rumah</option><option>Buku</option><option>Olahraga</option><option>Makanan</option><option>Seni</option><option>Otomotif</option></select>
           </div>
           <div class="form-group"><label>Nama Toko</label><input type="text" id="np-seller" placeholder="Nama toko kamu" value="${currentUser?.shopName || currentUser?.name || ''}"></div>
           <div class="form-group" style="grid-column:1/-1"><label>Deskripsi</label><textarea id="np-desc" placeholder="Deskripsikan produkmu..."></textarea></div>
@@ -2326,21 +2605,26 @@ function markAllNotifsRead() {
 function renderNotifications() {
   const el = document.getElementById('notifications-content');
   if (!el) return;
+  const unread = notifications.filter(n => !n.read).length;
   el.innerHTML = `
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.35rem">
-      <h1>Notifikasi</h1>
-      <button class="tbl-btn" onclick="markAllNotifsRead()">Tandai semua dibaca</button>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.35rem;gap:1rem;flex-wrap:wrap">
+      <h1 style="margin:0">Notifikasi</h1>
+      ${notifications.length ? `<button class="tbl-btn" onclick="markAllNotifsRead()">Tandai semua dibaca</button>` : ''}
     </div>
-    <p class="page-sub">${notifications.filter(n => !n.read).length} belum dibaca</p>
+    <p class="page-sub">${unread} belum dibaca · ${notifications.length} total</p>
     <div class="content-card">
       ${notifications.length ? notifications.map(n => `
-        <div class="notif-item" style="${n.read ? 'opacity:0.65' : ''}">
-          <div class="notif-icon">${n.icon}</div>
+        <div class="notif-item" style="${n.read ? 'opacity:0.65' : ''}" onclick="this.style.opacity='0.65'">
+          <div class="notif-icon">${n.icon || '🔔'}</div>
           <div class="notif-body"><strong>${n.title}</strong><p>${n.body}</p></div>
-          <div class="notif-time">${n.time}</div>
-        </div>`).join('') : '<p style="color:var(--text3);text-align:center;padding:2rem">Tidak ada notifikasi</p>'}
+          <div class="notif-time">${n.time || ''}</div>
+        </div>`).join('') : `
+        <div class="empty-cart" style="padding:2rem 1rem">
+          <div class="empty-icon">🔔</div>
+          <p>Belum ada notifikasi</p>
+          <button class="btn btn-primary" onclick="showPage('store')">Mulai Belanja</button>
+        </div>`}
     </div>`;
-  // mark as read when viewing
   setTimeout(() => { notifications.forEach(n => n.read = true); saveNotifs(); }, 1500);
 }
 
@@ -2529,16 +2813,24 @@ function renderHelp() {
   const el = document.getElementById('help-content');
   if (!el) return;
   const faqs = [
-    { q: 'Bagaimana cara memesan?', a: 'Pilih produk, tambahkan ke keranjang, lalu klik Lanjut ke Pembayaran. Isi alamat dan pilih metode pembayaran.' },
-    { q: 'Berapa lama pengiriman?', a: 'Estimasi 2–5 hari kerja untuk wilayah Jabodetabek, 3–7 hari untuk luar kota. Gratis ongkir untuk belanja di atas ambang batas (setara ~$75 / Rp1.200.000).' },
-    { q: 'Bagaimana menjadi penjual?', a: 'Klik "Jual" di menu atas atau "Mulai Berjualan". Daftar sebagai penjual dan listing produk langsung tayang.' },
-    { q: 'Bagaimana melacak pesanan?', a: 'Buka Pesanan Saya, lalu klik "Lacak Pesanan" pada pesanan yang ingin kamu pantau.' },
-    { q: 'Metode pembayaran apa saja?', a: 'Transfer bank, e-wallet (OVO, GoPay, Dana), dan kartu kredit/debit.' },
-    { q: 'Bagaimana menghubungi dukungan?', a: 'Email: support@yourshop.id · WhatsApp: +62 800 123 4567 · Senin–Jumat 09.00–18.00 WIB.' },
+    { q: 'Bagaimana cara memesan?', a: 'Pilih produk → Tambah ke keranjang → Lanjut ke Pembayaran. Isi alamat, pilih kurir, buat pesanan, lalu selesaikan pembayaran.' },
+    { q: 'Metode pembayaran apa saja?', a: 'Jika Midtrans aktif: VA bank, QRIS, e-wallet (GoPay/OVO/ShopeePay), kartu kredit/debit. Tanpa key gateway, tersedia mode bayar mock untuk demo.' },
+    { q: 'Bagaimana status pembayaran dikonfirmasi?', a: 'Setelah bayar di Midtrans, webhook menandai pesanan sebagai dibayar. Di halaman Pesanan Saya status berubah menjadi lunas; kamu juga bisa menekan Bayar lagi jika masih pending.' },
+    { q: 'Berapa lama pengiriman?', a: 'Estimasi 2–5 hari kerja Jabodetabek, 3–7 hari luar kota. Gratis ongkir di atas ambang batas (setara ~$75 / Rp1.200.000 tergantung kurs di pengaturan).' },
+    { q: 'Bagaimana melacak / membatalkan pesanan?', a: 'Buka Pesanan Saya → Lacak untuk timeline. Batalkan hanya jika belum dikirim. Setelah terkirim, gunakan Return/Refund.' },
+    { q: 'Bagaimana menjadi penjual?', a: 'Menu Jual / Jadi Penjual → daftar dengan peran penjual → kelola produk di Dasbor. Admin dapat meninjau KYC dan menangguhkan toko.' },
+    { q: 'Promo & kode diskon?', a: 'Di keranjang atau checkout, masukkan kode promo (contoh demo: FORGE10, HEMAT20, SAVE10) lalu terapkan sebelum membuat pesanan.' },
+    { q: 'Bagaimana menghubungi dukungan?', a: 'Email support@yourshop.id · formulir di halaman Kontak · jam kerja Senin–Jumat 09.00–18.00 WIB.' },
   ];
   el.innerHTML = `
     <h1>Bantuan & FAQ</h1>
-    <p class="page-sub">Temukan jawaban cepat untuk pertanyaan umum</p>
+    <p class="page-sub">Jawaban cepat seputar belanja, bayar, kirim, dan berjualan</p>
+    <div class="content-card" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:0.75rem;margin-bottom:1rem">
+      <button class="tbl-btn" style="justify-content:center" onclick="showPage('orders')">Pesanan Saya</button>
+      <button class="tbl-btn" style="justify-content:center" onclick="showPage('payment')">Pembayaran</button>
+      <button class="tbl-btn" style="justify-content:center" onclick="showPage('become-seller')">Jadi Penjual</button>
+      <button class="tbl-btn" style="justify-content:center" onclick="showPage('contact')">Kontak</button>
+    </div>
     <div class="content-card" style="padding:0 1.5rem">
       ${faqs.map((f,i) => `
         <div class="faq-item" id="faq-${i}">
@@ -2550,8 +2842,8 @@ function renderHelp() {
     </div>
     <div class="content-card" style="text-align:center">
       <h3>Masih butuh bantuan?</h3>
-      <p style="color:var(--text2);font-size:14px;margin-bottom:1rem">Tim dukungan kami siap membantu 24/7 untuk isu pesanan.</p>
-      <button class="btn btn-primary" onclick="toast('Tiket dukungan dikirim (demo)', 'success')">Hubungi Dukungan</button>
+      <p style="color:var(--text2);font-size:14px;margin-bottom:1rem">Kirim pesan lewat formulir kontak — kami akan menindaklanjuti.</p>
+      <button class="btn btn-primary" onclick="showPage('contact')">Hubungi Dukungan</button>
     </div>`;
 }
 
@@ -2853,39 +3145,91 @@ function renderTerms() {
   const el = document.getElementById('terms-content');
   if (!el) return;
   el.innerHTML = `<h1>${t('legal.termsTitle')}</h1>
+    <p class="page-sub">Ketentuan penggunaan platform YourShop.Id</p>
     <div class="content-card" style="line-height:1.7;font-size:14px;color:var(--text2)">
-      <p><strong>1. Penerimaan.</strong> Dengan menggunakan YourShop.Id Anda menyetujui syarat ini.</p>
-      <p><strong>2. Akun.</strong> Anda bertanggung jawab menjaga kerahasiaan kredensial.</p>
-      <p><strong>3. Transaksi.</strong> Pesanan mengikat setelah pembayaran dikonfirmasi. Komisi platform dapat dipotong dari penjual.</p>
-      <p><strong>4. Konten.</strong> Dilarang menjual barang ilegal atau melanggar hak pihak ketiga.</p>
-      <p><strong>5. Penalti.</strong> Pelanggaran dapat berujung suspensi akun atau toko.</p>
-      <p style="margin-top:1rem;font-size:12px;color:var(--text3)">Terakhir diperbarui: Agustus 2026</p>
+      <p><strong>1. Penerimaan.</strong> Dengan mengakses atau memakai YourShop.Id Anda menyetujui syarat ini.</p>
+      <p><strong>2. Akun.</strong> Anda wajib menjaga kerahasiaan kredensial. Aktivitas atas nama akun menjadi tanggung jawab Anda.</p>
+      <p><strong>3. Transaksi & pembayaran.</strong> Pesanan mengikat setelah pembayaran dikonfirmasi (gateway Midtrans atau status lunas). Komisi platform dapat dipotong dari penjual sesuai tarif yang berlaku.</p>
+      <p><strong>4. Pengiriman & pengembalian.</strong> Estimasi kirim bersifat indikatif. Pembatalan sebelum pengiriman diizinkan; setelah terkirim gunakan alur return/refund.</p>
+      <p><strong>5. Konten penjual.</strong> Dilarang menjual barang ilegal, palsu, atau melanggar hak pihak ketiga. Platform dapat menangguhkan toko.</p>
+      <p><strong>6. Batasan tanggung jawab.</strong> Platform menyediakan fasilitas marketplace; sengketa barang antara pembeli dan penjual diselesaikan sesuai kebijakan dukungan.</p>
+      <p style="margin-top:1rem;font-size:12px;color:var(--text3)">Terakhir diperbarui: November 2026 · <a href="#" onclick="showPage('privacy');return false">Kebijakan Privasi</a> · <a href="#" onclick="showPage('contact');return false">Kontak</a></p>
     </div>`;
 }
 function renderPrivacy() {
   const el = document.getElementById('privacy-content');
   if (!el) return;
   el.innerHTML = `<h1>${t('legal.privacyTitle')}</h1>
+    <p class="page-sub">Bagaimana kami menangani data Anda</p>
     <div class="content-card" style="line-height:1.7;font-size:14px;color:var(--text2)">
-      <p><strong>Data yang dikumpulkan:</strong> email, nama, alamat pengiriman, riwayat pesanan, dan log teknis.</p>
-      <p><strong>Penggunaan:</strong> memproses pesanan, keamanan, dan peningkatan layanan. Tidak dijual ke pihak ketiga.</p>
-      <p><strong>Penyimpanan:</strong> data disimpan di server Anda / penyedia hosting dengan kontrol akses.</p>
-      <p><strong>Hak Anda:</strong> minta akses, koreksi, atau penghapusan data melalui halaman Kontak.</p>
-      <p style="margin-top:1rem;font-size:12px;color:var(--text3)">Terakhir diperbarui: Agustus 2026</p>
+      <p><strong>Data yang dikumpulkan:</strong> email, nama, telepon, alamat pengiriman, riwayat pesanan, preferensi (tema/bahasa), dan log teknis.</p>
+      <p><strong>Pembayaran:</strong> data kartu/rekening diproses oleh penyedia pembayaran (Midtrans); kami menyimpan status transaksi, referensi, dan nominal — bukan nomor kartu penuh.</p>
+      <p><strong>Penggunaan:</strong> memproses pesanan, keamanan akun, notifikasi, dan peningkatan layanan. Data tidak dijual ke pihak ketiga.</p>
+      <p><strong>Penyimpanan:</strong> di server aplikasi (JSON/SQLite) dengan kontrol akses. Cookie/localStorage dipakai untuk sesi & preferensi di perangkat Anda.</p>
+      <p><strong>Hak Anda:</strong> minta akses, koreksi, atau penghapusan melalui halaman Kontak atau email support@yourshop.id.</p>
+      <p style="margin-top:1rem;font-size:12px;color:var(--text3)">Terakhir diperbarui: November 2026</p>
     </div>`;
 }
 function renderContact() {
   const el = document.getElementById('contact-content');
   if (!el) return;
+  const prefillName = currentUser?.name || '';
+  const prefillEmail = currentUser?.email || '';
   el.innerHTML = `<h1>${t('legal.contactTitle')}</h1>
+    <p class="page-sub">Tim dukungan YourShop.Id</p>
     <div class="content-card">
-      <p style="margin-bottom:1rem;color:var(--text2)">Email: <a href="mailto:support@yourshop.id">support@yourshop.id</a><br>
-      WhatsApp: +62 800-0000-0000<br>Jam kerja: Senin–Jumat 09.00–18.00 WIB</p>
-      <div class="form-group"><label>Nama</label><input id="contact-name" type="text"></div>
-      <div class="form-group"><label>Email</label><input id="contact-email" type="email"></div>
-      <div class="form-group"><label>Pesan</label><textarea id="contact-msg" rows="4" style="width:100%;border:1px solid var(--border);border-radius:var(--r);padding:0.5rem;background:var(--bg);color:var(--text)"></textarea></div>
-      <button class="btn btn-primary" onclick="toast('Pesan tercatat (demo)', 'success')">Kirim</button>
+      <p style="margin-bottom:1rem;color:var(--text2);font-size:14px;line-height:1.6">
+        Email: <a href="mailto:support@yourshop.id">support@yourshop.id</a><br>
+        Jam kerja: Senin–Jumat 09.00–18.00 WIB<br>
+        Topik: pesanan, pembayaran, akun penjual, KYC
+      </p>
+      <div class="form-group"><label>Nama</label><input id="contact-name" type="text" value="${prefillName.replace(/"/g,'&quot;')}"></div>
+      <div class="form-group"><label>Email</label><input id="contact-email" type="email" value="${prefillEmail.replace(/"/g,'&quot;')}"></div>
+      <div class="form-group"><label>Topik</label>
+        <select id="contact-topic" style="width:100%;padding:0.5rem;border:1px solid var(--border);border-radius:var(--r);background:var(--bg);color:var(--text)">
+          <option value="order">Pesanan / pengiriman</option>
+          <option value="payment">Pembayaran</option>
+          <option value="seller">Akun penjual / KYC</option>
+          <option value="other">Lainnya</option>
+        </select>
+      </div>
+      <div class="form-group"><label>Pesan</label><textarea id="contact-msg" rows="4" style="width:100%;border:1px solid var(--border);border-radius:var(--r);padding:0.5rem;background:var(--bg);color:var(--text)" placeholder="Jelaskan kendala Anda..."></textarea></div>
+      <button class="btn btn-primary" onclick="submitContact()">Kirim Pesan</button>
+      <p id="contact-status" style="font-size:12px;color:var(--text3);margin-top:0.75rem"></p>
     </div>`;
+}
+
+function submitContact() {
+  const name = document.getElementById('contact-name')?.value?.trim() || '';
+  const email = document.getElementById('contact-email')?.value?.trim() || '';
+  const topic = document.getElementById('contact-topic')?.value || 'other';
+  const msg = document.getElementById('contact-msg')?.value?.trim() || '';
+  const status = document.getElementById('contact-status');
+  if (!name || !email || !msg) {
+    toast('Lengkapi nama, email, dan pesan', 'error');
+    if (status) status.textContent = 'Form belum lengkap.';
+    return;
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    toast('Format email tidak valid', 'error');
+    return;
+  }
+  const ticket = {
+    id: 'T-' + Date.now().toString(36).toUpperCase(),
+    name, email, topic, msg,
+    at: new Date().toISOString(),
+    userId: currentUser?.id || null,
+  };
+  try {
+    const prev = JSON.parse(localStorage.getItem('ysi-contact-tickets') || '[]');
+    prev.unshift(ticket);
+    localStorage.setItem('ysi-contact-tickets', JSON.stringify(prev.slice(0, 50)));
+  } catch (_) {}
+  pushNotif('📩', 'Pesan terkirim', `Tiket ${ticket.id} — kami akan meninjau.`);
+  toast('Pesan tercatat. Tiket ' + ticket.id, 'success');
+  if (status) status.textContent = 'Tersimpan sebagai ' + ticket.id + ' (demo lokal).';
+  const ta = document.getElementById('contact-msg');
+  if (ta) ta.value = '';
 }
 
 function wireAssets() {
@@ -2923,6 +3267,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   updateUserUI();
   updateNotifBadge();
   updatePriceFilterPlaceholders();
+  initHeroCarousel();
   await loadInitialData();
   await validateSession();
 

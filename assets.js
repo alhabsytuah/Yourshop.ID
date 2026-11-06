@@ -75,6 +75,7 @@ const Assets = (() => {
     'Olahraga':   productPlaceholder('⚽', '#F0F5FA'),
     'Makanan':    productPlaceholder('🍎', '#FAF5F0'),
     'Seni':       productPlaceholder('🎨', '#F5F0FA'),
+    'Otomotif':   productPlaceholder('🚗', '#F0F4F8'),
     'default':    productPlaceholder('📦', '#F0EDE6'),
   };
 

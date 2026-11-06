@@ -84,13 +84,24 @@
   .main-header {
     background: var(--surface);
     border-bottom: 1px solid var(--border);
-    padding: 0.75rem 1.5rem;
+    padding: 0.85rem 1.5rem;
     display: flex;
     align-items: center;
-    gap: 1.25rem;
+    gap: 1rem;
     position: sticky;
     top: 0;
     z-index: 300;
+  }
+  @media (max-width: 900px) {
+    .nav-search-wrap { max-width: none; }
+    .search-btn { padding: 0 1rem; }
+    .search-cat-select { max-width: 110px; font-size: 12px; }
+  }
+  @media (max-width: 640px) {
+    .search-cat-select { display: none; }
+    .search-btn { border-radius: 0 50px 50px 0; margin-left: -2px; }
+    .nav-search-wrap { gap: 0; }
+    .nav-search { border-radius: 50px 0 0 50px; }
   }
   .nav-logo {
     font-family: var(--font-head);
@@ -106,33 +117,28 @@
   }
   .nav-logo span { color: var(--accent); }
 
-  /* Large search bar (eBay signature) */
-  .nav-search {
+  /* Large search bar (eBay signature: input | All Categories | Search btn) */
+  .nav-search-wrap {
     flex: 1;
-    max-width: 720px;
+    max-width: 780px;
     display: flex;
     align-items: stretch;
-    border: 2px solid var(--text);
+    gap: 0.5rem;
+  }
+  .nav-search {
+    flex: 1;
+    display: flex;
+    align-items: stretch;
+    border: 2px solid #191919;
     border-radius: 50px;
     overflow: hidden;
     background: #fff;
     transition: border-color 0.15s, box-shadow 0.15s;
+    min-height: 44px;
   }
   .nav-search:focus-within {
     border-color: var(--accent);
     box-shadow: 0 0 0 3px rgba(0,100,210,0.15);
-  }
-  .search-cat-select {
-    border: none;
-    background: #F5F5F5;
-    padding: 0 0.75rem;
-    font-family: var(--font-body);
-    font-size: 13px;
-    color: var(--text2);
-    border-right: 1px solid var(--border);
-    outline: none;
-    cursor: pointer;
-    max-width: 140px;
   }
   .nav-search input {
     flex: 1;
@@ -143,18 +149,38 @@
     color: var(--text);
     outline: none;
     background: transparent;
+    min-width: 0;
   }
   .nav-search input::placeholder { color: var(--text3); }
+  .search-cat-select {
+    border: none;
+    border-left: 1px solid var(--border);
+    background: #fff;
+    padding: 0 0.85rem;
+    font-family: var(--font-body);
+    font-size: 13px;
+    color: var(--text);
+    outline: none;
+    cursor: pointer;
+    max-width: 150px;
+    flex-shrink: 0;
+  }
   .search-btn {
     background: var(--accent);
     color: #fff;
     border: none;
-    padding: 0 1.35rem;
+    border-radius: 50px;
+    padding: 0 1.5rem;
     font-size: 15px;
+    font-weight: 700;
+    font-family: var(--font-body);
     cursor: pointer;
     display: flex;
     align-items: center;
+    gap: 0.35rem;
     transition: background 0.15s;
+    white-space: nowrap;
+    flex-shrink: 0;
   }
   .search-btn:hover { background: var(--accent2); }
 
@@ -216,44 +242,174 @@
   .page { display: none; }
   .page.active { display: block; }
 
-  /* HERO — eBay-inspired promotional banner */
+  /* HERO — fixed height (no jump on slide change) */
+  .hero-wrap {
+    max-width: 1280px;
+    margin: 0.85rem auto 0;
+    padding: 0 1.5rem;
+  }
   .hero {
-    background: linear-gradient(135deg, #0064D2 0%, #004E9A 60%, #003A75 100%);
-    color: #fff;
-    padding: 2.75rem 2rem 2.5rem;
-    text-align: center;
+    background: #7FDBDA;
+    color: #191919;
+    height: 200px;
+    padding: 1.35rem 2.25rem 1.75rem;
+    border-radius: 14px;
     position: relative;
     overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1.5rem;
+    box-sizing: border-box;
+    transition: background 0.45s ease;
   }
-  .hero::before {
-    content: '';
-    position: absolute; inset: 0;
-    background: radial-gradient(ellipse at 80% 20%, rgba(255,255,255,0.12) 0%, transparent 55%);
-    pointer-events: none;
-  }
-  .hero-tag {
-    display: inline-block;
-    background: rgba(255,255,255,0.15);
-    color: #fff;
-    border: 1px solid rgba(255,255,255,0.25);
-    border-radius: 100px;
-    font-size: 12px; font-weight: 600;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    padding: 0.3rem 1rem;
-    margin-bottom: 1rem;
+  .hero-left {
+    flex: 1;
+    max-width: 440px;
+    z-index: 1;
+    min-width: 0;
   }
   .hero h1 {
     font-family: var(--font-head);
-    font-size: clamp(1.8rem, 4vw, 2.8rem);
+    font-size: 1.65rem;
     font-weight: 800;
-    line-height: 1.15;
-    letter-spacing: -0.5px;
-    margin-bottom: 0.75rem;
+    line-height: 1.2;
+    letter-spacing: -0.4px;
+    margin: 0 0 0.35rem;
+    color: #0A3D62;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
-  .hero h1 em { color: #FFD100; font-style: normal; }
-  .hero p { color: rgba(255,255,255,0.85); font-size: 1rem; max-width: 520px; margin: 0 auto 1.5rem; }
-  .hero-cta { display: inline-flex; gap: 0.75rem; flex-wrap: wrap; justify-content: center; }
+  .hero p {
+    color: #1a4a5c;
+    font-size: 0.88rem;
+    margin: 0 0 0.9rem;
+    line-height: 1.4;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    max-height: 2.8em;
+  }
+  .hero-cta {
+    display: inline-flex;
+    gap: 0.55rem;
+    flex-wrap: nowrap;
+  }
+  .hero-cta .btn {
+    padding: 0.5rem 1.15rem;
+    font-size: 13px;
+  }
+  .hero-right {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.65rem;
+    height: 120px;
+    width: 300px;
+  }
+  .hero-card {
+    background: #fff;
+    border-radius: 12px;
+    padding: 0.85rem 0.95rem;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.08);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.3rem;
+    width: 84px;
+    height: 96px;
+    box-sizing: border-box;
+    transform: rotate(-4deg);
+    flex-shrink: 0;
+  }
+  .hero-card:nth-child(2) { transform: rotate(2deg); margin-top: -6px; background: #E8F8F8; }
+  .hero-card:nth-child(3), .hero-card.hero-card-accent {
+    transform: rotate(6deg);
+    background: linear-gradient(145deg, #0064D2, #004E9A);
+    color: #fff;
+  }
+  .hero-card-icon { font-size: 1.45rem; line-height: 1; }
+  .hero-card-label { font-size: 12px; font-weight: 700; color: #0A3D62; }
+  .hero-card:nth-child(3) .hero-card-label,
+  .hero-card.hero-card-accent .hero-card-label {
+    color: #fff;
+    font-size: 1.1rem;
+    font-weight: 800;
+    letter-spacing: -0.4px;
+    text-align: center;
+    line-height: 1.15;
+  }
+  .hero.hero-fade .hero-left,
+  .hero.hero-fade .hero-right {
+    opacity: 0.35;
+    transition: opacity 0.25s ease;
+  }
+  .hero.hero-show .hero-left,
+  .hero.hero-show .hero-right {
+    opacity: 1;
+    transition: opacity 0.35s ease;
+  }
+  .hero-dots {
+    position: absolute;
+    bottom: 0.65rem;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 0.35rem;
+    z-index: 2;
+  }
+  .hero-dots span {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: rgba(10,61,98,0.25);
+    cursor: pointer;
+    transition: background 0.2s, transform 0.2s, width 0.2s;
+  }
+  .hero-dots span:hover { background: rgba(10,61,98,0.5); transform: scale(1.1); }
+  .hero-dots span.active { background: #0A3D62; width: 16px; border-radius: 4px; }
+  .hero-nav {
+    position: absolute;
+    right: 0.85rem;
+    bottom: 0.55rem;
+    display: flex;
+    gap: 0.3rem;
+  }
+  .hero-nav button {
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    border: 1px solid rgba(10,61,98,0.2);
+    background: #fff;
+    color: #0A3D62;
+    cursor: pointer;
+    font-size: 13px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .hero-nav button:hover { background: #0A3D62; color: #fff; }
+  @media (max-width: 900px) {
+    .hero { height: 190px; padding: 1.15rem 1.5rem 1.6rem; }
+    .hero h1 { font-size: 1.4rem; }
+    .hero-right { width: 240px; height: 100px; }
+    .hero-card { width: 72px; height: 84px; padding: 0.65rem; }
+  }
+  @media (max-width: 720px) {
+    .hero {
+      height: 210px;
+      flex-direction: column;
+      text-align: center;
+      padding: 1.1rem 1.15rem 2.1rem;
+      justify-content: flex-start;
+      gap: 0.65rem;
+    }
+    .hero-left { max-width: none; width: 100%; }
+    .hero h1 { white-space: normal; font-size: 1.25rem; }
+    .hero p { -webkit-line-clamp: 2; margin-bottom: 0.65rem; }
+    .hero-cta { justify-content: center; }
+    .hero-right { display: none; }
+  }
   .btn {
     display: inline-flex; align-items: center; gap: 0.4rem;
     padding: 0.65rem 1.4rem;
@@ -263,10 +419,10 @@
     cursor: pointer; transition: all 0.18s;
     text-decoration: none; border: none;
   }
-  .btn-primary { background: #FFD100; color: #191919; }
-  .btn-primary:hover { background: #F5C400; }
-  .btn-outline { background: transparent; color: #fff; border: 1.5px solid rgba(255,255,255,0.5); }
-  .btn-outline:hover { background: rgba(255,255,255,0.12); border-color: #fff; }
+  .btn-primary { background: #0A3D62; color: #fff; }
+  .btn-primary:hover { background: #062a44; }
+  .btn-outline { background: transparent; color: #0A3D62; border: 1.5px solid rgba(10,61,98,0.35); }
+  .btn-outline:hover { background: rgba(255,255,255,0.45); border-color: #0A3D62; }
   .btn-sm { padding: 0.4rem 0.9rem; font-size: 13px; }
 
   /* CATEGORIES (secondary filter pills) */
@@ -551,9 +707,41 @@
   .form-group input:focus, .form-group select:focus { border-color: var(--accent); background: var(--surface); box-shadow: 0 0 0 3px rgba(0,100,210,0.12); }
   .form-submit { width: 100%; background: var(--accent); color: #fff; border: none; border-radius: var(--r); padding: 0.75rem; font-family: var(--font-body); font-size: 15px; font-weight: 600; cursor: pointer; margin-top: 0.5rem; transition: background 0.18s; }
   .form-submit:hover { background: var(--accent2); }
-  .form-divider { text-align: center; color: var(--text3); font-size: 13px; margin: 1rem 0; position: relative; }
-  .form-divider::before, .form-divider::after { content: ''; position: absolute; top: 50%; width: 40%; height: 1px; background: var(--border); }
-  .form-divider::before { left: 0; } .form-divider::after { right: 0; }
+  .form-divider {
+    text-align: center; color: var(--text3); font-size: 12px; margin: 1.15rem 0 0.85rem;
+    position: relative; font-weight: 500; letter-spacing: 0.02em;
+  }
+  .form-divider::before, .form-divider::after {
+    content: ''; position: absolute; top: 50%; height: 1px; background: var(--border); width: 28%;
+  }
+  .form-divider::before { left: 0; }
+  .form-divider::after { right: 0; }
+  .demo-login-box {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--rl);
+    padding: 0.85rem 0.9rem 1rem;
+  }
+  .demo-login-hint {
+    font-size: 12px; color: var(--text2); text-align: center; margin: 0 0 0.75rem; line-height: 1.45;
+  }
+  .demo-login-hint code {
+    font-size: 11px; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 4px; padding: 0.1rem 0.35rem; color: var(--text); font-weight: 600;
+  }
+  .demo-login-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;
+  }
+  .demo-login-grid .demo-btn-admin { grid-column: 1 / -1; }
+  .demo-login-btn {
+    display: flex; align-items: center; justify-content: center; gap: 0.4rem;
+    width: 100%; padding: 0.55rem 0.65rem; font-size: 13px; font-weight: 500;
+    font-family: var(--font-body); border-radius: var(--r);
+    border: 1px solid var(--border); background: var(--surface); color: var(--text);
+    cursor: pointer; transition: border-color 0.15s, background 0.15s, color 0.15s;
+  }
+  .demo-login-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-light); }
+  .demo-login-btn span.icon { font-size: 14px; line-height: 1; }
   .sell-badge { background: var(--accent-light); border: 1px solid rgba(0,100,210,0.2); border-radius: var(--r); padding: 0.75rem 1rem; font-size: 13px; color: var(--accent); margin-top: 1.25rem; text-align: center; }
   .role-btns { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
   .role-btn { flex: 1; background: var(--bg); border: 1px solid var(--border); border-radius: var(--r); padding: 0.5rem; font-family: var(--font-body); font-size: 13px; cursor: pointer; text-align: center; transition: all 0.15s; color: var(--text2); }
@@ -827,20 +1015,24 @@
 <div class="top-bar">
   <div class="top-bar-left" id="top-bar-left">
     <span>Hai!</span>
-    <button onclick="showPage('login')">Masuk</button>
-    <span class="sep">|</span>
-    <button onclick="showPage('login')">Daftar</button>
+    <button onclick="showPage('login'); try{switchTab('login-tab', document.querySelector('.tab'));}catch(e){}">Masuk</button>
+    <span>atau</span>
+    <button onclick="showPage('login'); setTimeout(function(){ try{switchTab('register-tab', document.querySelectorAll('.tab')[1]);}catch(e){} }, 0)">daftar</button>
     <span class="sep">|</span>
     <button onclick="showPage('deals')">Deals</button>
     <span class="sep">|</span>
+    <button onclick="showPage('deals')">Brand Outlet</button>
+    <span class="sep">|</span>
     <button onclick="showPage('help')">Bantuan</button>
+    <span class="sep">|</span>
+    <button onclick="showPage('contact')">Kontak</button>
   </div>
   <div class="top-bar-right">
     <button onclick="showPage('become-seller')">Jual</button>
     <span class="sep">|</span>
-    <button onclick="showPage('watchlist')">Watchlist</button>
+    <button onclick="showPage('watchlist')">Watchlist ▾</button>
     <span class="sep">|</span>
-    <button onclick="showPage('orders')" id="orders-btn" style="display:none">Pesanan Saya</button>
+    <button onclick="showPage('orders')" id="orders-btn" style="display:none">Pesanan Saya ▾</button>
     <button onclick="showPage('cart')">Keranjang</button>
   </div>
 </div>
@@ -848,20 +1040,23 @@
 <!-- MAIN HEADER -->
 <header class="main-header">
   <div class="nav-logo" onclick="showPage('store')">YourShop<span>.Id</span></div>
-  <div class="nav-search">
-    <select class="search-cat-select" id="search-cat" onchange="if(this.value!=='All')filterCategory(this.value, null)">
-      <option value="All">Semua Kategori</option>
-      <option value="Elektronik">Elektronik</option>
-      <option value="Fashion">Fashion</option>
-      <option value="Rumah">Rumah</option>
-      <option value="Buku">Buku</option>
-      <option value="Olahraga">Olahraga</option>
-      <option value="Makanan">Makanan</option>
-      <option value="Seni">Seni</option>
-    </select>
-    <input type="text" placeholder="Cari produk, merek, atau penjual..." id="nav-search-input" oninput="handleSearch(this.value)" onclick="showPage('store')">
+  <div class="nav-search-wrap">
+    <div class="nav-search">
+      <input type="text" placeholder="Cari apa saja..." id="nav-search-input" oninput="handleSearch(this.value)" onclick="showPage('store')" onkeydown="if(event.key==='Enter'){showPage('store');handleSearch(this.value)}">
+      <select class="search-cat-select" id="search-cat" onchange="if(this.value!=='All')filterCategory(this.value, null)" aria-label="Kategori">
+        <option value="All">Semua Kategori</option>
+        <option value="Elektronik">Elektronik</option>
+        <option value="Fashion">Fashion</option>
+        <option value="Rumah">Rumah &amp; Taman</option>
+        <option value="Buku">Buku</option>
+        <option value="Olahraga">Olahraga</option>
+        <option value="Makanan">Makanan</option>
+        <option value="Seni">Seni &amp; Koleksi</option>
+        <option value="Otomotif">Otomotif &amp; Sparepart</option>
+      </select>
+    </div>
     <button class="search-btn" onclick="showPage('store'); handleSearch(document.getElementById('nav-search-input').value)" title="Cari">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      Cari
     </button>
   </div>
   <div class="nav-actions">
@@ -882,7 +1077,7 @@
   </div>
 </header>
 
-<!-- CATEGORY BAR -->
+<!-- CATEGORY BAR (eBay-style secondary nav) -->
 <div class="cat-bar" id="category-tabs">
   <button class="cat-bar-item active" onclick="filterCategory('All', this)">Semua</button>
   <button class="cat-bar-item" onclick="filterCategory('Elektronik', this)">Elektronik</button>
@@ -892,17 +1087,41 @@
   <button class="cat-bar-item" onclick="filterCategory('Olahraga', this)">Olahraga</button>
   <button class="cat-bar-item" onclick="filterCategory('Makanan', this)">Makanan</button>
   <button class="cat-bar-item" onclick="filterCategory('Seni', this)">Seni &amp; Koleksi</button>
+  <button class="cat-bar-item" onclick="filterCategory('Otomotif', this)">Otomotif &amp; Sparepart</button>
+  <button class="cat-bar-item" onclick="showPage('deals')">Deals</button>
+  <button class="cat-bar-item" onclick="showPage('become-seller')">Jual</button>
 </div>
 
 <!-- STORE PAGE -->
 <div class="page active" id="page-store">
-  <div class="hero">
-    <div class="hero-tag">Marketplace Terbuka · Penjual Terverifikasi</div>
-    <h1>Cari. Belanja. <em>Jual.</em></h1>
-    <p>Ribuan produk dari penjual independen. Temukan yang kamu cari — atau mulai berjualan hari ini.</p>
-    <div class="hero-cta">
-      <button class="btn btn-primary" onclick="document.querySelector('.shop-layout').scrollIntoView({behavior:'smooth'})">Lihat Produk</button>
-      <button class="btn btn-outline" onclick="showPage('become-seller')">Mulai Berjualan →</button>
+  <div class="hero-wrap">
+    <div class="hero" id="hero-banner">
+      <div class="hero-left">
+        <h1>Hemat hingga 20% hari ini</h1>
+        <p>Temukan penawaran terbaik dari penjual terverifikasi. Mulai belanja atau jual barangmu sekarang.</p>
+        <div class="hero-cta">
+          <button class="btn btn-primary" onclick="showPage('deals')">Ambil Kupon</button>
+          <button class="btn btn-outline" onclick="document.querySelector('.shop-layout').scrollIntoView({behavior:'smooth'})">Lihat Produk</button>
+        </div>
+      </div>
+      <div class="hero-right" aria-hidden="true">
+        <div class="hero-card">
+          <span class="hero-card-icon">🏷️</span>
+          <span class="hero-card-label">Hemat</span>
+        </div>
+        <div class="hero-card">
+          <span class="hero-card-icon">🎟️</span>
+          <span class="hero-card-label">Kupon</span>
+        </div>
+        <div class="hero-card">
+          <span class="hero-card-label">20%<br>OFF</span>
+        </div>
+      </div>
+      <div class="hero-dots"><span class="active"></span><span></span><span></span><span></span></div>
+      <div class="hero-nav">
+        <button type="button" onclick="cycleHero(-1)" aria-label="Sebelumnya">‹</button>
+        <button type="button" onclick="cycleHero(1)" aria-label="Berikutnya">›</button>
+      </div>
     </div>
   </div>
 
@@ -997,13 +1216,16 @@
         <div class="form-group"><label>Email</label><input type="email" id="login-email" placeholder="kamu@contoh.com"></div>
         <div class="form-group"><label>Kata Sandi</label><input type="password" id="login-pass" placeholder="••••••••"></div>
         <button class="form-submit" onclick="doLogin()">Masuk</button>
-        <p style="font-size:12px;color:var(--accent);margin:0.65rem 0 0;text-align:center;cursor:pointer" onclick="switchTab('forgot-tab', null);document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'))">Lupa kata sandi?</p>
-        <p style="font-size:12px;color:var(--text3);margin:0.5rem 0 0.75rem;text-align:center">Akun demo: password <code>demo</code></p>
-        <div class="form-divider">atau coba akun demo</div>
-        <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
-          <button class="btn btn-sm btn-outline" style="border-color:var(--border);color:var(--text2);" onclick="demoLogin('buyer')">👤 Demo Pembeli</button>
-          <button class="btn btn-sm btn-outline" style="border-color:var(--border);color:var(--text2);" onclick="demoLogin('seller')">🏪 Demo Penjual</button>
-          <button class="btn btn-sm btn-outline" style="border-color:var(--border);color:var(--text2);" onclick="demoLogin('admin')">🛡 Demo Admin</button>
+        <p style="font-size:12px;color:var(--accent);margin:0.75rem 0 0;text-align:center;cursor:pointer" onclick="switchTab('forgot-tab', null);document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'))">Lupa kata sandi?</p>
+
+        <div class="form-divider">atau masuk cepat</div>
+        <div class="demo-login-box">
+          <p class="demo-login-hint">Akun demo · kata sandi <code>demo</code></p>
+          <div class="demo-login-grid">
+            <button type="button" class="demo-login-btn" onclick="demoLogin('buyer')"><span class="icon">👤</span> Pembeli</button>
+            <button type="button" class="demo-login-btn" onclick="demoLogin('seller')"><span class="icon">🏪</span> Penjual</button>
+            <button type="button" class="demo-login-btn demo-btn-admin" onclick="demoLogin('admin')"><span class="icon">🛡</span> Admin</button>
+          </div>
         </div>
       </div>
       <div id="forgot-tab" style="display:none">
@@ -1031,7 +1253,7 @@
         <div id="seller-fields" style="display:none">
           <div class="form-group"><label>Nama Toko</label><input type="text" id="reg-shop" placeholder="Toko Keren Saya"></div>
           <div class="form-group"><label>Kategori</label>
-            <select id="reg-cat"><option>Elektronik</option><option>Fashion</option><option>Rumah</option><option>Buku</option><option>Olahraga</option><option>Makanan</option><option>Seni</option></select>
+            <select id="reg-cat"><option>Elektronik</option><option>Fashion</option><option>Rumah</option><option>Buku</option><option>Olahraga</option><option>Makanan</option><option>Seni</option><option>Otomotif</option></select>
           </div>
         </div>
         <button class="form-submit" onclick="doRegister()">Buat Akun</button>

@@ -26,6 +26,7 @@
 #include <sstream>
 #include <chrono>
 #include <ctime>
+#include <cmath>
 #include <fstream>
 #include <cctype>
 #include <cstring>
@@ -152,6 +153,12 @@ struct Order {
     double      commissionRate = 0;  // e.g. 0.05 = 5%
     double      commission = 0;
     double      sellerPayout = 0;
+    // Payment gateway (Midtrans)
+    std::string paymentProvider;   // midtrans | mock | ""
+    std::string paymentRef;        // Midtrans transaction_id / mock ref
+    std::string snapToken;         // Midtrans Snap token (short-lived)
+    std::string midtransOrderId;   // sanitized order id sent to Midtrans
+    long long   grossAmountIdr = 0; // amount charged in IDR
 
     json toJson() const {
         json j;
@@ -177,6 +184,11 @@ struct Order {
         j["commissionRate"] = commissionRate;
         j["commission"]     = commission;
         j["sellerPayout"]   = sellerPayout;
+        j["paymentProvider"] = paymentProvider.empty() ? json(nullptr) : json(paymentProvider);
+        j["paymentRef"]      = paymentRef.empty() ? json(nullptr) : json(paymentRef);
+        j["snapToken"]       = snapToken.empty() ? json(nullptr) : json(snapToken);
+        j["midtransOrderId"] = midtransOrderId.empty() ? json(nullptr) : json(midtransOrderId);
+        j["grossAmountIdr"]  = grossAmountIdr;
 
         json itemsArr = json::array();
         for (const auto& item : items) {
@@ -419,6 +431,27 @@ private:
                             });
                         }
                     }
+                    o.paymentStatus   = j.value("paymentStatus", "pending");
+                    o.paymentMethod   = j.value("paymentMethod", "");
+                    o.paidAt          = j.value("paidAt", "");
+                    o.invoiceNumber   = j.value("invoiceNumber", "");
+                    o.shippingMethod  = j.value("shippingMethod", "");
+                    o.shippingCost    = j.value("shippingCost", 0.0);
+                    o.shipAddress     = j.value("shipAddress", "");
+                    o.shipCity        = j.value("shipCity", "");
+                    o.shipPhone       = j.value("shipPhone", "");
+                    o.cancelReason    = j.value("cancelReason", "");
+                    o.returnStatus    = j.value("returnStatus", "none");
+                    o.returnReason    = j.value("returnReason", "");
+                    o.subtotal        = j.value("subtotal", 0.0);
+                    o.commissionRate  = j.value("commissionRate", 0.0);
+                    o.commission      = j.value("commission", 0.0);
+                    o.sellerPayout    = j.value("sellerPayout", 0.0);
+                    o.paymentProvider = j.value("paymentProvider", "");
+                    o.paymentRef      = j.value("paymentRef", "");
+                    o.snapToken       = j.value("snapToken", "");
+                    o.midtransOrderId = j.value("midtransOrderId", "");
+                    o.grossAmountIdr  = j.value("grossAmountIdr", 0LL);
                     orders.push_back(o);
                 }
             }
@@ -503,6 +536,9 @@ private:
             {10, "Linen Throw Blanket",            "🛋️", 38.00,  0,      "Rumah",      "CozyHome",    4.6, 230,  "Baru",     true, 20, "Linen Eropa 100% stonewash. Ringan, bernapas, semakin lembut setiap dicuci.", {"linen","home","cozy"}, false },
             {11, "Running Shoes Ultra",            "👟", 95.00,  120.00, "Fashion",    "SpeedStep",   4.5, 678,  "Diskon",   true, 12, "Sol tengah busa responsif dan bagian atas mesh bernapas.", {"shoes","running","sport"}, false },
             {12, "Cold Brew Concentrate",          "🧃", 16.50,  0,      "Makanan",    "BrewHouse",   4.7, 410,  "",         true, 60, "Kopi cold brew siap diencerkan. Direndam 20 jam. Encerkan 1:3.", {"coffee","cold brew","food"}, false },
+            {13, "Oli Mesin Synthetic 5W-30",       "🛢️", 32.00,  39.00,  "Otomotif",   "AutoPartID",  4.8, 520,  "Diskon",   true, 48, "Oli mesin fully synthetic 5W-30 untuk mesin bensin. Perlindungan anti-aus dan hemat bahan bakar. Isi 4 liter.", {"oli","mesin","sparepart"}, true  },
+            {14, "Kampas Rem Ceramic Depan",        "🛑", 28.50,  0,      "Otomotif",   "BrakePro",    4.6, 210,  "Baru",     true, 36, "Kampas rem ceramic low-dust untuk roda depan. Cocok sedan dan hatchback populer. Termasuk sensor keausan.", {"rem","kampas","sparepart"}, false },
+            {15, "Aki Kering 12V 60Ah",             "🔋", 75.00,  89.00,  "Otomotif",   "AutoPartID",  4.7, 180,  "Diskon",   true, 20, "Aki kering maintenance-free 12V 60Ah. Daya cranking tinggi, tahan getaran. Garansi resmi 12 bulan.", {"aki","battery","sparepart"}, false },
         };
 
         // --- Users (password demo: "demo" — di-hash dengan salt) ---
@@ -1641,8 +1677,174 @@ void handleUpdateOrderStatus(const httplib::Request& req, httplib::Response& res
     jsonResponse(res, it->toJson());
 }
 
-// ------ POST /api/orders/:id/pay ------  Mock payment gateway
-// Body: { paymentMethod?, simulateFail? }
+// ============================================================
+//  MIDTRANS SNAP — payment gateway
+//  Env:
+//    MIDTRANS_SERVER_KEY   (required for live Snap)
+//    MIDTRANS_CLIENT_KEY   (returned to frontend for Snap.js)
+//    MIDTRANS_IS_PRODUCTION=0|1  (default 0 = sandbox)
+//    YSI_IDR_RATE=16000          (convert internal USD total → IDR)
+//  Fallback: mock pay when SERVER_KEY empty or body.forceMock=true
+// ============================================================
+
+struct MidtransConfig {
+    std::string serverKey;
+    std::string clientKey;
+    bool production = false;
+    double idrRate = 16000.0;
+    bool enabled() const { return !serverKey.empty(); }
+};
+
+static MidtransConfig midtransCfg() {
+    MidtransConfig c;
+    if (const char* s = std::getenv("MIDTRANS_SERVER_KEY")) c.serverKey = s;
+    if (const char* s = std::getenv("MIDTRANS_CLIENT_KEY")) c.clientKey = s;
+    if (const char* s = std::getenv("MIDTRANS_IS_PRODUCTION"))
+        c.production = (std::string(s) == "1" || std::string(s) == "true");
+    if (const char* s = std::getenv("YSI_IDR_RATE")) {
+        double v = std::atof(s);
+        if (v > 0) c.idrRate = v;
+    }
+    return c;
+}
+
+static std::string sha512Hex(const std::string& data) {
+    unsigned char hash[SHA512_DIGEST_LENGTH];
+    SHA512(reinterpret_cast<const unsigned char*>(data.data()), data.size(), hash);
+    static const char* hex = "0123456789abcdef";
+    std::string out;
+    out.resize(SHA512_DIGEST_LENGTH * 2);
+    for (int i = 0; i < SHA512_DIGEST_LENGTH; i++) {
+        out[i * 2]     = hex[(hash[i] >> 4) & 0xF];
+        out[i * 2 + 1] = hex[hash[i] & 0xF];
+    }
+    return out;
+}
+
+/** Sanitize order id for Midtrans (alphanumeric, dash, underscore; max 50). */
+static std::string midtransSafeOrderId(const std::string& id) {
+    std::string out;
+    for (char ch : id) {
+        if (std::isalnum(static_cast<unsigned char>(ch)) || ch == '-' || ch == '_')
+            out.push_back(ch);
+        else if (ch == '#')
+            continue;
+        else
+            out.push_back('-');
+    }
+    if (out.empty()) out = "ORD";
+    // append short timestamp to keep unique across retries
+    out += "-" + std::to_string(std::time(nullptr) % 1000000);
+    if (out.size() > 50) out = out.substr(0, 50);
+    return out;
+}
+
+static long long toIdrAmount(double totalUsdLike, double rate) {
+    // Internal catalog uses USD-style decimals; Midtrans needs integer IDR.
+    long long idr = static_cast<long long>(std::llround(totalUsdLike * rate));
+    if (idr < 1) idr = 1;
+    return idr;
+}
+
+/** Create Midtrans Snap transaction. Returns {ok, token, redirect_url, order_id, error}. */
+static json createMidtransSnap(const Order& order, const User* customer, const MidtransConfig& cfg) {
+    json result = {{"ok", false}};
+    std::string host = cfg.production ? "https://app.midtrans.com"
+                                      : "https://app.sandbox.midtrans.com";
+    std::string mtOrderId = order.midtransOrderId.empty()
+        ? midtransSafeOrderId(order.id) : order.midtransOrderId;
+    long long gross = order.grossAmountIdr > 0
+        ? order.grossAmountIdr : toIdrAmount(order.total, cfg.idrRate);
+
+    json itemDetails = json::array();
+    for (const auto& it : order.items) {
+        long long price = toIdrAmount(it.unitPrice, cfg.idrRate);
+        itemDetails.push_back({
+            {"id", std::to_string(it.productId)},
+            {"price", price},
+            {"quantity", it.qty},
+            {"name", it.productName.substr(0, 50)}
+        });
+    }
+    if (order.shippingCost > 0) {
+        itemDetails.push_back({
+            {"id", "SHIPPING"},
+            {"price", toIdrAmount(order.shippingCost, cfg.idrRate)},
+            {"quantity", 1},
+            {"name", "Ongkir"}
+        });
+    }
+    // Align sum to gross (rounding)
+    long long sum = 0;
+    for (auto& it : itemDetails) sum += it["price"].get<long long>() * it["quantity"].get<int>();
+    if (sum != gross && !itemDetails.empty()) {
+        long long delta = gross - sum;
+        itemDetails.back()["price"] = itemDetails.back()["price"].get<long long>() + delta;
+    }
+
+    json payload = {
+        {"transaction_details", {
+            {"order_id", mtOrderId},
+            {"gross_amount", gross}
+        }},
+        {"item_details", itemDetails},
+        {"credit_card", {{"secure", true}}}
+    };
+    json customerDetails = json::object();
+    if (customer) {
+        customerDetails["first_name"] = customer->name.empty() ? order.customerName : customer->name;
+        if (!customer->email.empty()) customerDetails["email"] = customer->email;
+        if (!customer->phone.empty()) customerDetails["phone"] = customer->phone;
+    } else {
+        customerDetails["first_name"] = order.customerName;
+    }
+    if (!order.shipPhone.empty() && !customerDetails.contains("phone"))
+        customerDetails["phone"] = order.shipPhone;
+    payload["customer_details"] = customerDetails;
+
+    try {
+        httplib::Client cli(host);
+        cli.set_connection_timeout(8, 0);
+        cli.set_read_timeout(15, 0);
+        cli.set_basic_auth(cfg.serverKey, "");
+        auto res = cli.Post("/snap/v1/transactions", payload.dump(), "application/json");
+        if (!res) {
+            result["error"] = "Tidak bisa menghubungi Midtrans";
+            ysiLog("PAY", "midtrans connect failed");
+            return result;
+        }
+        json body;
+        try { body = json::parse(res->body); } catch (...) {
+            result["error"] = "Respons Midtrans tidak valid";
+            result["httpStatus"] = res->status;
+            return result;
+        }
+        if (res->status < 200 || res->status >= 300) {
+            std::string err = body.value("error_messages", json::array()).is_array() &&
+                              !body["error_messages"].empty()
+                ? body["error_messages"][0].get<std::string>()
+                : body.value("status_message", "Midtrans error " + std::to_string(res->status));
+            result["error"] = err;
+            result["httpStatus"] = res->status;
+            ysiLog("PAY", "midtrans error: " + err);
+            return result;
+        }
+        result["ok"] = true;
+        result["token"] = body.value("token", "");
+        result["redirect_url"] = body.value("redirect_url", "");
+        result["order_id"] = mtOrderId;
+        result["gross_amount"] = gross;
+        return result;
+    } catch (const std::exception& e) {
+        result["error"] = std::string("Midtrans exception: ") + e.what();
+        return result;
+    }
+}
+
+// ------ POST /api/orders/:id/pay ------
+// Body: { paymentMethod?, simulateFail?, forceMock? }
+// With MIDTRANS_SERVER_KEY → returns snapToken + clientKey (status remains pending until webhook)
+// Without key / forceMock → immediate mock paid
 void handlePayOrder(const httplib::Request& req, httplib::Response& res) {
     auto auth = requireAuth(req, res);
     if (!auth) return;
@@ -1660,18 +1862,80 @@ void handlePayOrder(const httplib::Request& req, httplib::Response& res) {
         errorResponse(res, "Forbidden", 403); return;
     }
     if (it->status == "cancelled") { errorResponse(res, "Pesanan dibatalkan"); return; }
-    if (it->paymentStatus == "paid") { jsonResponse(res, it->toJson()); return; }
+    if (it->paymentStatus == "paid") {
+        json resp = it->toJson();
+        resp["gateway"] = {{"provider", it->paymentProvider.empty() ? "mock" : it->paymentProvider},
+                           {"status", "already_paid"}};
+        jsonResponse(res, resp);
+        return;
+    }
 
     if (body.value("simulateFail", false)) {
         it->paymentStatus = "failed";
+        it->paymentProvider = "mock";
         store.saveToDisk();
         errorResponse(res, "Pembayaran gagal (simulasi gateway)", 402); return;
     }
 
     if (body.contains("paymentMethod"))
         it->paymentMethod = body["paymentMethod"].get<std::string>();
+
+    MidtransConfig cfg = midtransCfg();
+    bool forceMock = body.value("forceMock", false) || !cfg.enabled();
+
+    if (!forceMock) {
+        const User* customer = nullptr;
+        for (const auto& u : store.users) {
+            if (u.id == it->customerId) { customer = &u; break; }
+        }
+        if (it->midtransOrderId.empty())
+            it->midtransOrderId = midtransSafeOrderId(it->id);
+        if (it->grossAmountIdr <= 0)
+            it->grossAmountIdr = toIdrAmount(it->total, cfg.idrRate);
+
+        json snap = createMidtransSnap(*it, customer, cfg);
+        if (!snap.value("ok", false)) {
+            // Soft-fail to mock only if explicitly allowed; otherwise return error
+            if (body.value("allowMockFallback", true)) {
+                ysiLog("PAY", "midtrans failed, fallback mock: " + snap.value("error", ""));
+                forceMock = true;
+            } else {
+                errorResponse(res, snap.value("error", "Gagal membuat transaksi Midtrans"), 502);
+                return;
+            }
+        } else {
+            it->snapToken = snap.value("token", "");
+            it->paymentProvider = "midtrans";
+            it->paymentStatus = "pending";
+            it->paymentRef = snap.value("order_id", it->midtransOrderId);
+            it->midtransOrderId = snap.value("order_id", it->midtransOrderId);
+            it->grossAmountIdr = snap.value("gross_amount", it->grossAmountIdr);
+            if (it->invoiceNumber.empty())
+                it->invoiceNumber = "INV-2026-" + std::to_string(++store.nextInvoiceSeq);
+            store.saveToDisk();
+
+            json resp = it->toJson();
+            resp["gateway"] = {
+                {"provider", "midtrans"},
+                {"mode", cfg.production ? "production" : "sandbox"},
+                {"snapToken", it->snapToken},
+                {"clientKey", cfg.clientKey},
+                {"redirectUrl", snap.value("redirect_url", "")},
+                {"orderId", it->midtransOrderId},
+                {"grossAmountIdr", it->grossAmountIdr},
+                {"message", "Buka Snap untuk menyelesaikan pembayaran"}
+            };
+            jsonResponse(res, resp);
+            return;
+        }
+    }
+
+    // --- Mock path ---
     it->paymentStatus = "paid";
     it->paidAt = currentTimestamp();
+    it->paymentProvider = "mock";
+    it->paymentRef = "YP-" + std::to_string(std::time(nullptr));
+    it->snapToken.clear();
     if (it->invoiceNumber.empty())
         it->invoiceNumber = "INV-2026-" + std::to_string(++store.nextInvoiceSeq);
     store.saveToDisk();
@@ -1679,10 +1943,113 @@ void handlePayOrder(const httplib::Request& req, httplib::Response& res) {
     json resp = it->toJson();
     resp["gateway"] = {
         {"provider", "YourShopPay (mock)"},
-        {"reference", "YP-" + std::to_string(std::time(nullptr))},
-        {"message", "Pembayaran berhasil diproses"}
+        {"reference", it->paymentRef},
+        {"message", cfg.enabled()
+            ? "Fallback mock (Midtrans error / forceMock)"
+            : "Pembayaran mock — set MIDTRANS_SERVER_KEY untuk gateway nyata"}
     };
     jsonResponse(res, resp);
+}
+
+// ------ POST /api/payments/midtrans/notification ------
+// Midtrans server-to-server webhook (no JWT). Verifies signature_key.
+void handleMidtransNotification(const httplib::Request& req, httplib::Response& res) {
+    setCorsHeaders(req, res);
+    MidtransConfig cfg = midtransCfg();
+    if (!cfg.enabled()) {
+        errorResponse(res, "Midtrans belum dikonfigurasi", 503); return;
+    }
+
+    json body;
+    try { body = json::parse(req.body); }
+    catch (...) { errorResponse(res, "JSON tidak valid"); return; }
+
+    std::string orderId     = body.value("order_id", "");
+    std::string statusCode  = body.value("status_code", "");
+    std::string grossAmount = body.value("gross_amount", "");
+    std::string signature   = body.value("signature_key", "");
+    std::string txnStatus   = body.value("transaction_status", "");
+    std::string fraudStatus = body.value("fraud_status", "");
+    std::string txnId       = body.value("transaction_id", "");
+    std::string payType     = body.value("payment_type", "");
+
+    std::string expected = sha512Hex(orderId + statusCode + grossAmount + cfg.serverKey);
+    if (signature != expected) {
+        ysiLog("PAY", "midtrans signature mismatch for " + orderId);
+        errorResponse(res, "Signature tidak valid", 403); return;
+    }
+
+    std::lock_guard<std::mutex> lock(store.mu);
+    auto it = std::find_if(store.orders.begin(), store.orders.end(),
+        [&](const Order& o){
+            return o.midtransOrderId == orderId || o.paymentRef == orderId || o.id == orderId;
+        });
+    if (it == store.orders.end()) {
+        // Also try matching without timestamp suffix
+        it = std::find_if(store.orders.begin(), store.orders.end(),
+            [&](const Order& o){
+                return !o.midtransOrderId.empty() && orderId.find(o.midtransOrderId.substr(0, 12)) == 0;
+            });
+    }
+    if (it == store.orders.end()) {
+        ysiLog("PAY", "midtrans notif unknown order " + orderId);
+        // Still 200 so Midtrans stops retrying poison messages after investigation
+        jsonResponse(res, {{"status", "ignored"}, {"reason", "order_not_found"}});
+        return;
+    }
+
+    bool markPaid = false;
+    bool markFail = false;
+    if (txnStatus == "capture") {
+        if (fraudStatus.empty() || fraudStatus == "accept") markPaid = true;
+    } else if (txnStatus == "settlement") {
+        markPaid = true;
+    } else if (txnStatus == "pending") {
+        it->paymentStatus = "pending";
+    } else if (txnStatus == "deny" || txnStatus == "cancel" || txnStatus == "expire") {
+        markFail = true;
+    }
+
+    if (markPaid && it->paymentStatus != "paid") {
+        it->paymentStatus = "paid";
+        it->paidAt = currentTimestamp();
+        it->paymentProvider = "midtrans";
+        it->paymentRef = txnId.empty() ? orderId : txnId;
+        if (!payType.empty()) it->paymentMethod = payType;
+        if (it->invoiceNumber.empty())
+            it->invoiceNumber = "INV-2026-" + std::to_string(++store.nextInvoiceSeq);
+        store.pushNotif(it->customerId, "Pembayaran berhasil",
+            "Pesanan " + it->id + " telah dibayar via Midtrans.", "order");
+        ysiLog("PAY", "midtrans paid " + it->id + " txn=" + txnId);
+    } else if (markFail && it->paymentStatus != "paid") {
+        it->paymentStatus = "failed";
+        it->paymentProvider = "midtrans";
+        it->paymentRef = txnId.empty() ? orderId : txnId;
+        ysiLog("PAY", "midtrans failed " + it->id + " status=" + txnStatus);
+    }
+
+    store.saveToDisk();
+    jsonResponse(res, {
+        {"status", "ok"},
+        {"orderId", it->id},
+        {"paymentStatus", it->paymentStatus},
+        {"transactionStatus", txnStatus}
+    });
+}
+
+// ------ GET /api/payments/config ------  public client key for Snap.js
+void handlePaymentConfig(const httplib::Request& req, httplib::Response& res) {
+    setCorsHeaders(req, res);
+    MidtransConfig cfg = midtransCfg();
+    jsonResponse(res, {
+        {"provider", cfg.enabled() ? "midtrans" : "mock"},
+        {"clientKey", cfg.clientKey},
+        {"isProduction", cfg.production},
+        {"snapJsUrl", cfg.production
+            ? "https://app.midtrans.com/snap/snap.js"
+            : "https://app.sandbox.midtrans.com/snap/snap.js"},
+        {"enabled", cfg.enabled()}
+    });
 }
 
 // ------ POST /api/orders/:id/cancel ------
@@ -2404,6 +2771,10 @@ int main() {
     svr.Get("/api/orders/(.+)",                      handleGetOrder);
     svr.Get("/api/shipping/rates",                   handleShippingRates);
 
+    // --- Pembayaran (Midtrans) ---
+    svr.Post("/api/payments/midtrans/notification",  handleMidtransNotification);
+    svr.Get("/api/payments/config",                  handlePaymentConfig);
+
     // --- Pengguna / Autentikasi ---
     svr.Get("/api/users",                  handleGetUsers);
     svr.Put("/api/users/(.+)",             handleUpdateUser);
@@ -2442,6 +2813,7 @@ int main() {
             {"orders", (int)store.orders.size()},
             {"users", (int)store.users.size()},
             {"auth", "JWT-HS256 + PBKDF2"},
+            {"payment", midtransCfg().enabled() ? "midtrans" : "mock"},
             {"tls", std::getenv("YSI_HTTPS") ? true : false},
             {"rateLimit", redisCfg().enabled ? "redis" : "memory"},
             {"redis", redisCfg().enabled ?
