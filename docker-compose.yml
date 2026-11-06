@@ -23,6 +23,10 @@ services:
       YSI_COMMISSION_RATE: "0.05"
       YSI_LOG_FILE: /app/logs/api.log
       YSI_EMAIL_MODE: file
+      MIDTRANS_SERVER_KEY: ${MIDTRANS_SERVER_KEY:-}
+      MIDTRANS_CLIENT_KEY: ${MIDTRANS_CLIENT_KEY:-}
+      MIDTRANS_IS_PRODUCTION: ${MIDTRANS_IS_PRODUCTION:-0}
+      YSI_IDR_RATE: ${YSI_IDR_RATE:-16000}
     volumes:
       - ysi-data:/app/data
       - ysi-logs:/app/logs
